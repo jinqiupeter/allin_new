@@ -34,6 +34,33 @@ function Snap:_getBetRound(game_id, table_id)
     return self.bet_rounds[key]
 end
 
+function Snap:_updateGameStake(occupied_seats, args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local mysql = args.mysql
+
+    for key, value in pairs(occupied_seats) do
+        local user_id = value.player_id
+        local stake = value.player_stake
+
+        cc.printdebug("updating stake: %s for user: %s", stake, user_id)
+        local sql = "INSERT INTO game_stake (game_id, table_id, hand_id, user_id, stake ) "
+                    .. " VALUES ( " .. game_id .. ", "
+                    .. table_id .. ", "
+                    .. self:_getHand(game_id, table_id) .. ", "
+                    .. user_id .. ", "
+                    .. stake .. ")"
+                    .. " ON DUPLICATE KEY UPDATE stake = " .. stake .. ", "
+                                              .. "updated_at = NOW()" 
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+        end
+
+    end
+end
+
 _handleGameState = function (snap_value, args)
     local self = args.self
     --tcp: SNAP 1:0 1 <<1>>
@@ -157,7 +184,6 @@ _handleTable = function (snap_value, args)
             sit_out = 0
         end
         local player_stake          = tmp[4]
-        local player_stake          = tmp[4]
         local bet_amount            = tmp[5] -- bet amount
         local last_action           = tmp[6] -- 0: None, 1: ResetAction, 2: Check, 3: Fold, 4: Call, 5: Bet, 6: Raise, 7: Allin, 8: Show, 9: Muck, 10: Sitout, 11: Back
         local hole_cards            = tmp[7] or ""
@@ -173,6 +199,11 @@ _handleTable = function (snap_value, args)
         i = i + 1
     end
     value.occupied_seats = occupied_seats
+
+    -- only dealer should update game_stake table
+    if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
+        self:_updateGameStake(occupied_seats, {game_id = game_id, table_id = table_id, mysql = instance:getMysql()})
+    end
 
     -- pots
     local pots = {}
