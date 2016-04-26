@@ -94,7 +94,12 @@ _M.GameState = {
 _M.Limit = {
     ListClubLimit = 50,
     ListGameLimit = 20,
-    ListClubApplicationListLimit = 20
+    ListClubApplicationListLimit = 20,
+    ListDataLimit = 20
+}
+
+_M.Config = {
+    GoldToStakeRate = 10
 }
 
 return table.readonly(_M)

@@ -30,6 +30,48 @@ local _updateUserGameHistory = function (mysql, args)
     end
 end
 
+local _buyStake = function (required_stake, args)
+    local required_stake = tonumber(required_stake)
+    local instance = args.instance
+    local mysql = args.mysql
+    local game_id = args.game_id    -- create record in buying
+
+    local gold_needed = required_stake / Constants.Config.GoldToStakeRate
+    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return false, "db err: " .. err
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    if gold_available < gold_needed then
+        return false, "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold needed(" .. gold_available .. ")"
+    end
+
+    -- update user.gold
+    sql = "UPDATE user SET gold = " .. gold_available - gold_needed .. " WHERE id = " .. instance:getCid()
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return false, "db err: " .. err
+    end
+    
+    -- create record in buying
+    sql = "INSERT INTO buying (user_id, game_id, gold, stake) "
+          .. " VALUES ( " .. instance:getCid() .. ", "
+          .. game_id .. ", "
+          .. gold_needed .. ", "
+          .. required_stake .. ")"
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return false, "db err: " .. err
+    end
+
+    return true
+end
+
 local _handlePSERVER, _handleSNAP, _handleGAMEINFO, _handleGAMELIST, _handlePLAYERLIST, _handleCLIENTINFO, _handleERR, _handleMSG, _handleOK
 
 _handlePSERVER = function (parts, args)
@@ -131,6 +173,8 @@ end
 
 _handleGAMEINFO = function (parts, args)
     local msgid = args.msgid
+    local instance = args.instance
+
     if tonumber(parts[1]) ~= nil then
         msgid = parts[1]
         table.remove(parts, 1)
@@ -171,7 +215,27 @@ _handleGAMEINFO = function (parts, args)
     result.data.max_players         = info[5]
     result.data.player_count        = info[6]
     result.data.timeout             = info[7]
-    result.data.stake               = info[7]
+
+    -- buy required stake
+    local required_stake            = info[8]
+    local ok, err = _buyStake(required_stake, {instance = instance, mysql = args.mysql, game_id = result.data.game_id})
+    if not ok then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "failed to buy stake: " .. err
+
+        -- leave the game
+        local message = " UNREGISTER " .. result.data.game_id .. "\n";
+        cc.printdebug("sending message to allin server: %s", message)
+        local allin = instance:getAllin()
+        local bytes, err = allin:sendMessage(message)
+        if not bytes then
+            cc.printwarn("failed to send message: %s", err)
+        end 
+        
+        return result
+    end
+
+    result.data.stake               = required_stake
     _updateUserGameHistory(args.mysql, {game_id = result.data.game_id, 
                                         user_id = args.user_id, 
                                         game_state = result.data.game_state
