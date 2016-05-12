@@ -429,16 +429,20 @@ function GameAction:creategameAction(args)
     local allow_rebuy = 0
     local allow_rebuy_after = 0
     local deny_register_after = 0
-    if not game_mode or game_mode ~= Constants.GameMode.GameModeFreezeOut then
+    if not game_mode then
         game_mode = Constants.GameMode.GameModeSNG -- default to SNG
         cc.printinfo("game_mode set to default: %d", game_mode)
     else
         game_mode = data.game_mode
+    end
+
+    if tonumber(game_mode) ~= Constants.GameMode.GameModeRingGame then
         start_at =  data.start_at
         allow_rebuy = data.allow_rebuy
         allow_rebuy_after = data.allow_rebuy_after
         deny_register_after = data.deny_register_after
     end
+        
 
     local max_players = data.max_players
     if not max_players then
