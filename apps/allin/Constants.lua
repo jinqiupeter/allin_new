@@ -95,7 +95,9 @@ _M.Limit = {
     ListClubLimit = 50,
     ListGameLimit = 20,
     ListClubApplicationListLimit = 20,
-    ListDataLimit = 20
+    ListDataLimit = 20,
+    ListFriendRequestLimit = 20,
+    ListFriendsLimit = 20
 }
 
 _M.Config = {
