@@ -132,7 +132,7 @@ function AuthAction:signinAction(args)
     local inspect = require("inspect")
     local data = args.data
     local result = {state_type = "action_state", data = {
-        action = data.action, state = 0, msg = "登录成功"}
+        action = args.action, state = 0, msg = "登录成功"}
     }
 
     local phone = data.phone
@@ -206,6 +206,7 @@ function AuthAction:signinAction(args)
     end
 
     result.data.session = session
+    result.sid = session
     return result
 end
 
@@ -213,7 +214,7 @@ end
 function AuthAction:signoutAction(args)
     --TODO
     --1. remove user from online user list
-    return {err = "not implemented"}
+    return {msg = "not implemented"}
 end
 
 return AuthAction
