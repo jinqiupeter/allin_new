@@ -184,6 +184,41 @@ function SocialAction:addfriendAction(args)
     return result
 end
 
+function SocialAction:sendprivatemessageAction(args)
+    local data = args.data
+    local target_id = data.target_id
+    local content_type = data.content_type or "text" -- can be "text" or "voice", voice messages are uploaded as files
+    local content = data.content
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not target_id then
+        cc.printinfo("argument not provided: \"target_id\"")
+        result.data.msg = "target_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet 
+        return result
+    end
+
+
+    local instance = self:getInstance()
+     
+
+    -- send to target_id for approval
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "social.privatemessage"}}
+    message.data.from_user = instance:getCid()
+    message.data.phone = instance:getPhone()
+    message.data.nickname = instance:getNickname()
+    message.data.content = content
+    message.data.content_type = content_type
+    online:sendMessage(target_id, json.encode(message))
+
+    result.data.state = 0
+    result.data.target_id = target_id
+    result.data.msg = "message sent to target user id: " .. target_id
+    return result
+end
 function SocialAction:listfriendrequestAction(args)
     local data = args.data
     local limit = data.limit or Constants.Limit.ListFriendRequestLimit

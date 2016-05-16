@@ -138,8 +138,20 @@ function ClubAction:listjoinedclubAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-
+    local online = instance:getOnline()
     result.data.club_joined = dbres
+    local index = 1
+    while index <= #result.data.club_joined do
+        local found_club_id = result.data.club_joined[index].id 
+        
+        -- get player count
+        local online_count = online:getOnlineClubMemberCount(found_club_id)
+        cc.printdebug("online player count for club %s: %s", found_club_id, online_count)
+        result.data.club_joined[index].online_count = online_count
+
+        index = index + 1
+    end
+
     result.data.state = 0
     result.data.msg = #dbres .. " club(s) joined"
     return result

@@ -53,6 +53,10 @@ function Online:getClubMembers(club_id)
     return self._redis:smembers(_ONLINE_SET_CLUB .. club_id)
 end
 
+function Online:getOnlineClubMemberCount(club_id)
+    return self._redis:scard(_ONLINE_SET_CLUB .. club_id)
+end
+
 function Online:addToClub(user_id, club_id)
     local redis = self._redis
     redis:initPipeline()

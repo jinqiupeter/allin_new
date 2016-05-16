@@ -920,7 +920,7 @@ function GameAction:startgameAction(args)
 
     -- at least 2 players are required. user_game_history records are added in handleGameInfo
     local game_runtime = Game_Runtime:new(instance)
-    local player_count = game_runtime:getPlayerCount(result.data.game_id)
+    local player_count = game_runtime:getPlayerCount(game_id)
     if tonumber(player_count) < 2 then
         result.data.state = Constants.Error.LogicError
         result.data.msg = "there must be at least 2 players joined the game before the game can be started"

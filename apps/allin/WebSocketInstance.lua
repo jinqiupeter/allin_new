@@ -46,9 +46,9 @@ function WebSocketInstance:onConnected()
 end
 
 function WebSocketInstance:onDisconnected(event)
-    if event.reason ~= gbc.Constants.CLOSE_CONNECT then
+    --if event.reason ~= gbc.Constants.CLOSE_CONNECT then
         -- connection interrupted unexpectedly, remove user from online list
-        cc.printwarn("[websocket:%s] connection interrupted unexpectedly", self:getConnectId())
+        cc.printwarn("[websocket:%s] connection interrupted unexpectedly, removing from online list", self:getConnectId())
         local username = self:getCid()
 
         -- remove user to each of his/her club's online user list
@@ -60,7 +60,7 @@ function WebSocketInstance:onDisconnected(event)
             end
         end
         self._online:remove(username)
-    end
+    --end
 
     self:dispatchEvent({
         name    = _EVENT.DISCONNECT,
