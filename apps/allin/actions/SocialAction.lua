@@ -157,7 +157,7 @@ function SocialAction:addfriendAction(args)
         return result
     end
 
-    sql = "INSERT INTO friend_request (from_user, to_user, notes ) "
+    local sql = "INSERT INTO friend_request (from_user, to_user, notes ) "
                       .. " VALUES (" .. instance:getCid() .. ", " .. target_id .. ", " .. instance:sqlQuote(notes) .. ") "
                       .. " ON DUPLICATE KEY UPDATE status = 0, notes = " .. instance:sqlQuote(notes)
     cc.printdebug("executing sql: %s", sql)
@@ -273,7 +273,15 @@ function SocialAction:handlefriendrequestAction(args)
         end
     end
 
-    -- TODO: send notification to from_user
+    -- send notification to from_user
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "social.friendhandle"}}
+    message.data.user_id = instance:getCid()
+    message.data.phone = instance:getPhone()
+    message.data.nickname = instance:getNickname()
+    message.data.notes = "user " .. message.data.nickname .. " handled your friend request"
+    message.data.status = status
+    online:sendMessage(from_user, json.encode(message))
      
     result.data.state = 0
     result.data.from_user = from_user
@@ -385,6 +393,61 @@ _formatmsg = function(message, format)
         end
     end
     return tostring(message)
+end
+
+function SocialAction:invitegameAction(args)
+    local data = args.data
+    local game_id = data.game_id
+    local user_id = data.user_id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not game_id then
+        cc.printinfo("argument not provided: \"game_id\"")
+        result.data.msg = "game_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet 
+        return result
+    end
+    if not user_id then
+        cc.printinfo("argument not provided: \"user_id\"")
+        result.data.msg = "user_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet 
+        return result
+    end
+
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+
+    local sql = "SELECT * FROM game WHERE id = " .. game_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local game_name = dbres[1].name
+    local game_mode = dbres[1].game_mode
+     
+    -- send invitation to user
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "social.invitegame"}}
+    message.data.sender_id = instance:getCid()
+    message.data.sender_phone = instance:getPhone()
+    message.data.sender_nickname = instance:getNickname()
+    message.data.game_id = game_id
+    message.data.game_name = game_name
+    message.data.game_mode = game_mode
+    message.data.notes = "user " .. message.data.sender_nickname .. " invited you to join game " .. message.data.game_name
+    online:sendMessage(user_id, json.encode(message))
+
+    result.data.state = 0
+    result.data.game_id = game_id
+    result.data.user_id = user_id
+    result.data.msg = "game invided"
+    return result
 end
 
 return SocialAction

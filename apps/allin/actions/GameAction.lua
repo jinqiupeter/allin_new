@@ -842,7 +842,7 @@ function GameAction:requestplayerinfoAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT id, phone, nickname FROM user WHERE id = " .. user_id 
+    local sql = "SELECT id, phone, nickname, gold FROM user WHERE id = " .. user_id 
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -860,6 +860,7 @@ function GameAction:requestplayerinfoAction(args)
     result.data.id          = player.id
     result.data.phone       = player.phone
     result.data.nickname    = player.nickname
+    result.data.gold        = player.gold
     result.data.state = Constants.OK
     return result
 end

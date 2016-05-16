@@ -120,16 +120,17 @@ end
 
 function ClubAction:listjoinedclubAction(args)
     local data = args.data
+    local instance = self:getInstance()
+    local user_id = data.user_id or instance:getCid()
     local result = {state_type = "action_state", data = {
         action = args.action}
     }
 
-    local instance = self:getInstance()
     local mysql = instance:getMysql()
     local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description FROM club a, user_club b "
                 .. " WHERE b.deleted = 0 AND "
                 .. " a.id = b.club_id AND "
-                .. " b.user_id = " .. instance:getCid()
+                .. " b.user_id = " .. user_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -374,7 +375,25 @@ function ClubAction:handleapplicationAction(args)
         
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = " UPDATE club_application set status = " .. status 
+
+    -- get club name and check if i am owner
+    local sql = " SELECT * FROM club WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local club_name = dbres[1].name
+    if tonumber(instance:getCid()) ~= tonumber(dbres[1].owner_id) then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "You are not authorized to handle requests for club " .. club_name
+        return result
+    end
+        
+
+    sql = " UPDATE club_application set status = " .. status 
                 .. " WHERE user_id = " .. user_id
                 .. " AND club_id = " .. club_id
     cc.printdebug("executing sql: %s", sql)
@@ -398,6 +417,15 @@ function ClubAction:handleapplicationAction(args)
         end
     end
      
+    -- send notification to applicant
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "club.clubhandle"}}
+    message.data.club_id = club_id
+    message.data.club_name = club_name
+    message.data.notes = "user " .. instance:getNickname() .. " handled your club request for club " .. message.data.club_name
+    message.data.status = status
+    online:sendMessage(user_id, json.encode(message))
+
     result.data.state = 0
     result.data.msg = "application handled"
     return result
