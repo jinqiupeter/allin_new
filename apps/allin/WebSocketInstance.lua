@@ -34,7 +34,6 @@ function WebSocketInstance:onConnected()
 
     -- add user to each of his/her club's online user list
     local clubIds = self:getClubIds(self:getMysql())
-    local inspect = require("inspect")
     if type(clubIds) == "table" then
         for key, value in pairs(clubIds) do
             online:addToClub(self:getCid(), value)
@@ -46,13 +45,14 @@ function WebSocketInstance:onConnected()
 end
 
 function WebSocketInstance:onDisconnected(event)
-    --if event.reason ~= gbc.Constants.CLOSE_CONNECT then
+    if event.reason ~= gbc.Constants.CLOSE_CONNECT then
         -- connection interrupted unexpectedly, remove user from online list
         cc.printwarn("[websocket:%s] connection interrupted unexpectedly, removing from online list", self:getConnectId())
         local username = self:getCid()
 
         -- remove user to each of his/her club's online user list
         local clubs = self:getClubIds(self:getMysql())
+        cc.printdebug("removing user %s from online list", self:getCid())
         if type(clubs) == "table" then
             for key, value in pairs(clubs) do
                 local online = self:getOnline()
@@ -60,7 +60,7 @@ function WebSocketInstance:onDisconnected(event)
             end
         end
         self._online:remove(username)
-    --end
+    end
 
     self:dispatchEvent({
         name    = _EVENT.DISCONNECT,

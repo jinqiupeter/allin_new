@@ -46,11 +46,12 @@ local _buyStake = function (required_stake, args)
     end
     local gold_available = tonumber(dbres[1].gold)
     if gold_available < gold_needed then
-        return false, "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold needed(" .. gold_available .. ")"
+        return false, "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold available(" .. gold_available .. ")"
     end
 
     -- update user.gold
     sql = "UPDATE user SET gold = " .. gold_available - gold_needed .. " WHERE id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
         cc.printdebug("db err: %s", err)
@@ -63,6 +64,7 @@ local _buyStake = function (required_stake, args)
           .. game_id .. ", "
           .. gold_needed .. ", "
           .. required_stake .. ")"
+    cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
         cc.printdebug("db err: %s", err)
@@ -130,7 +132,7 @@ _handleGAMELIST = function (parts, args)
         club_id_condition  = "(" .. table.concat(instance:getClubIds(mysql), ", ") .. ")"
     end
 
-    local sql = "SELECT g.id, club_id, g.name, g.owner_id, g.max_players, c.name as club_name, blinds_start, blinds_factor, game_mode, u.nickname "
+    local sql = "SELECT g.id, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, game_mode, u.nickname "
                 .. " FROM game g, club c, user u, user_game_history ug"
                 .. " WHERE g.deleted != 1 "
                 .. " AND g.id IN " .. game_id_condition 
@@ -423,84 +425,209 @@ function GameAction:creategameAction(args)
     local data = args.data
     local msgid = args.__id
 
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
     -- user input validity check
     local game_mode = data.game_mode
-    local start_at = 0
-    local allow_rebuy = 0
-    local allow_rebuy_after = 0
-    local deny_register_after = 0
+    local extra = {}
     if not game_mode then
-        game_mode = Constants.GameMode.GameModeSNG -- default to SNG
-        cc.printinfo("game_mode set to default: %d", game_mode)
-    else
-        game_mode = data.game_mode
+        result.data.msg = "game_mode not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"game_mode\"")
+        return result
     end
 
-    if tonumber(game_mode) ~= Constants.GameMode.GameModeRingGame then
-        start_at =  data.start_at
-        allow_rebuy = data.allow_rebuy
-        allow_rebuy_after = data.allow_rebuy_after
-        deny_register_after = data.deny_register_after
+    if tonumber(game_mode) == Constants.GameMode.GameModeRingGame then -- 坐下即玩
+        extra.duration = data.duration
+        if not extra.duration then
+            result.data.msg = "duration not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+    elseif tonumber(game_mode) == Constants.GameMode.GameModeFreezeOut then -- MTT
+        -- start at
+        extra.start_at =  data.start_at
+        if not extra.start_at then
+            result.data.msg = "start_at not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- blind factor
+        extra.blind_factor = data.blind_factor
+        if not extra.blind_factor then
+            result.data.msg = "blind_factor not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- blind time
+        extra.blind_time = data.blind_time
+        if not extra.blind_time then
+            result.data.msg = "blind_time not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- is rebuy allowed?
+        extra.allow_rebuy = data.allow_rebuy
+        if not extra.allow_rebuy then
+            result.data.msg = "allow_rebuy not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- how many times of rebuy allowed?
+        extra.allow_rebuy_times = data.allow_rebuy_times
+        if not extra.allow_rebuy_times then
+            result.data.msg = "allow_rebuy_times not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- only allow rebuy before level
+        extra.allow_rebuy_before_level = data.allow_rebuy_before_level
+        if not extra.allow_rebuy_before_level then
+            result.data.msg = "allow_rebuy_before_level not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- ante
+        extra.ante = data.ante
+        if not extra.ante then
+            result.data.msg = "ante not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- maximum winner sharing pool
+        extra.winner_pool_max = data.winner_pool_max
+        if not extra.winner_pool_max then
+            result.data.msg = "winner_pool_max not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- deny register after game's been started for $ seconds
+        extra.deny_register_after = data.deny_register_after
+        if not extra.deny_register_after then
+            result.data.msg = "deny_register_after not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+    elseif tonumber(game_mode) == Constants.GameMode.GameModeSNG then -- SNG
+        -- blind factor
+        extra.blind_factor = data.blind_factor
+        if not extra.blind_factor then
+            result.data.msg = "blind_factor not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- blind time
+        extra.blind_time = data.blind_time
+        if not extra.blind_time then
+            result.data.msg = "blind_time not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- is rebuy allowed?
+        extra.allow_rebuy = data.allow_rebuy
+        if not extra.allow_rebuy then
+            result.data.msg = "allow_rebuy not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- how many times of rebuy allowed?
+        extra.allow_rebuy_times = data.allow_rebuy_times
+        if not extra.allow_rebuy_times then
+            result.data.msg = "allow_rebuy_times not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- only allow rebuy before level
+        extra.allow_rebuy_before_level = data.allow_rebuy_before_level
+        if not extra.allow_rebuy_before_level then
+            result.data.msg = "allow_rebuy_before_level not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+
+        -- maximum winner sharing pool
+        extra.winner_pool_max = data.winner_pool_max
+        if not extra.winner_pool_max then
+            result.data.msg = "winner_pool_max not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
     end
         
+    -- buying gold
+    local buying_gold = data.buying_gold
+    if not buying_gold then
+        result.data.msg = "buying_gold not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
 
+    -- buying stake
+    local buying_stake = data.buying_stake
+    if not buying_stake then
+        result.data.msg = "buying_stake not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+
+    -- max players
     local max_players = data.max_players
     if not max_players then
-        max_players = 5
-        cc.printinfo("max_players set to default: %d", max_players)
+        result.data.msg = "max_players not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
     end
-    local stake = data.stake -- player's initial stake
-    if not stake then
-        stake = 1500
-        cc.printinfo("stake set to default: %d", stake)
-    end
+
+    -- user action timeout
     local timeout = data.timeout -- user action timeout, in seconds
     if not timeout then
-        timeout = 30
-        cc.printinfo("timeout set to default: %d", timeout)
+        result.data.msg = "timeout not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
     end
+
     local blinds_start = data.blinds_start
     if not blinds_start then
-        blinds_start = 20
-        cc.printinfo("blinds_start set to default: %d", blinds_start)
+        result.data.msg = "blinds_start not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
     end
-    local blinds_factor = data.blinds_factor -- blind.amount = (blind.blinds_factor * blind.amount) / 10
-    if not blinds_factor then
-        blinds_factor = 20
-        cc.printinfo("blinds_factor set to default: %d", blinds_factor)
-    end
-    local blinds_time = data.blinds_time -- time interval to raise blinds, in seconds
-    if not blinds_time then
-        blinds_time = 300
-        cc.printinfo("blinds_time set to default: %d", blinds_time)
-    end
-    local password = data.password
-    if not timeout then
-        password = ""
-        cc.printinfo("password not set")
-    end
+
+    -- password
+    local password = data.password or ""
+
+    -- game name
     local name = data.name
     if not name then
-        local nickname = self:getInstance():getNickname()
-        name = nickname .. "'s game"
-        cc.printinfo("name set to default: %s", name)
+        result.data.msg = "name not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
     end
-    local expire_in = data.expire_in
-    if not expire_in then
-        expire_in = 30 * 60
-        cc.printinfo("expire_in set to default: %d", expire_in)
-    end
+
+    -- which club does this game belong to?
     local club_id = data.club_id
     if not club_id then
-        club_id = 0
-        cc.printinfo("club_id set to default: %d", club_id)
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
     end
 
     self._currentAction = args.action
     self._msgid = msgid
-    local result = {state_type = "action_state", data = {
-        action = args.action}
-    }
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
@@ -515,13 +642,13 @@ function GameAction:creategameAction(args)
     local message = msgid .. " CREATE game_id:"         .. game_id
                                 .. " type:"             .. game_mode 
                                 .. " players:"          .. max_players 
-                                .. " stake:"            .. stake 
+                                .. " stake:"            .. buying_stake 
                                 .. " timeout:"          .. timeout
                                 .. " blinds_start:"     .. blinds_start
-                                .. " blinds_factor:"    .. blinds_factor
-                                .. " blinds_time:"      .. blinds_time
+                                .. " blinds_factor:"    .. (extra.blinds_factor or 12)
+                                .. " blinds_time:"      .. (extra.blinds_time or 30)
                                 .. " password:"         .. password
-                                .. " expire_in:"        .. expire_in
+                                .. " expire_in:"        .. (extra.duration or 0)
                                 .. " \"name:"           .. name .. "\""
                                 .. "\n" -- '\n' is mandatory
     cc.printdebug("sending message to allin server: %s", message)
@@ -535,24 +662,18 @@ function GameAction:creategameAction(args)
         return result
     end 
 
-    local sql = "INSERT INTO game (max_players, stake, timeout, blinds_start, blinds_factor, blinds_time, password, name, state, owner_id, expire_in, club_id, game_mode, start_at, allow_rebuy, allow_rebuy_after, deny_register_after) "
+    -- create record in table game
+    local sql = "INSERT INTO game (max_players, timeout, blinds_start, password, name,  owner_id, club_id, game_mode, buying_gold, buying_stake) "
                       .. " VALUES (" .. max_players .. ", "
-                               ..  stake .. ", "
                                ..  timeout .. ", "
                                ..  blinds_start .. ", "
-                               ..  blinds_factor .. ", "
-                               ..  blinds_time .. ", "
                                .. instance:sqlQuote(password) .. ", "
                                .. instance:sqlQuote(name) .. ", "
-                               ..  1 .. ", "
                                .. instance:getCid() .. ", "
-                               .. expire_in .. ", "
                                .. club_id .. ", "
                                .. game_mode .. ", "
-                               .. start_at .. ", "
-                               .. allow_rebuy .. ", "
-                               .. allow_rebuy_after .. ", "
-                               .. deny_register_after .. "); "
+                               .. buying_gold .. ", "
+                               .. buying_stake .. "); "
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -561,8 +682,30 @@ function GameAction:creategameAction(args)
         return result
     end
 
+    -- create record in table game_extra
+    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, winner_pool_max, deny_register_after) "
+                      .. " VALUES (" .. game_id .. ", "
+                               ..  game_mode .. ", "
+                               ..  (extra.duration or 0) .. ", "
+                               ..  (extra.blind_factor or 0) .. ", "
+                               ..  (extra.blind_time or 0) .. ", "
+                               ..  (extra.start_at or 0) .. ", "
+                               ..  (extra.allow_rebuy or 0) .. ", "
+                               ..  (extra.allow_rebuy_times or 0) .. ", "
+                               ..  (extra.allow_rebuy_before_level or 0) .. ", "
+                               ..  (extra.ante or 0) .. ", "
+                               ..  (extra.winner_pool_max or 0) .. ", "
+                               ..  (extra.deny_register_after or 0) .. ") "
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    -- add game owner to the channel
     if game_mode == Constants.GameMode.GameModeFreezeOut then
-        -- add game owner to the channel
         local channel = "mtt_" .. tostring(game_id)
         local res, err = Leancloud:subscribeChannel({channel = channel, 
                                     installation = instance:getInstallation()
@@ -905,11 +1048,6 @@ function GameAction:startgameAction(args)
     if game.owner_id ~= user_id then
         result.data.state = Constants.Error.PermissionDenied
         result.data.msg = "you are not game owner, only the game owner can start a game"
-        return result
-    end
-    if game.state ~= 1 then
-        result.data.state = Constants.Error.LogicError
-        result.data.msg = "game already started or ended"
         return result
     end
     if game.game_mode == Constants.GameMode.GameModeFreezeOut then
