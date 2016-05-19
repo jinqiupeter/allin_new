@@ -126,11 +126,13 @@ function ClubAction:listjoinedclubAction(args)
         action = args.action}
     }
 
+    local user_clubs = instance:getClubIds(instance:getMysql())
+    local condition = table.concat(user_clubs, ", ")
     local mysql = instance:getMysql()
-    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description FROM club a, user_club b "
+    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description, count(b.user_id) as total_members FROM club a, user_club b "
                 .. " WHERE b.deleted = 0 AND "
                 .. " a.id = b.club_id AND "
-                .. " b.user_id = " .. user_id
+                .. " b.club_id in (" .. condition .. " ) group by b.club_id"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
