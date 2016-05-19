@@ -200,11 +200,19 @@ function SocialAction:sendprivatemessageAction(args)
         return result
     end
 
-
     local instance = self:getInstance()
-     
+    local mysql = instance:getMysql()
+    local sql = "SELECT nickname FROM user where id = " .. target_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local target_name = dbres[1].nickname
 
-    -- send to target_id for approval
+    -- send message to target user
     local online = instance:getOnline()
     local message = {state_type = "server_push", data = {push_type = "social.privatemessage"}}
     message.data.from_user = instance:getCid()
@@ -216,7 +224,10 @@ function SocialAction:sendprivatemessageAction(args)
 
     result.data.state = 0
     result.data.target_id = target_id
-    result.data.msg = "message sent to target user id: " .. target_id
+    result.data.target_name = target_name
+    result.data.msg = content
+    result.data.from_user = instance:getCid()
+    result.data.from = instance:getNickname()
     return result
 end
 function SocialAction:listfriendrequestAction(args)
