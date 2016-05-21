@@ -290,7 +290,24 @@ _handlePLAYERLIST = function (parts, args)
 
     --server response looks like: PLAYERLIST 1 0   
     result.data.game_id = parts[2]
-    local player_ids = table.subrange(parts, 3, #parts) 
+
+    local player_info = table.subrange(parts, 3, #parts) 
+    local player_ids = {}
+    local player_seats = {}
+    local player_tables = {}
+    for key, value in pairs(player_info) do
+        local info = string_split(value, ":")
+        local player_id = info[1]
+        local table_id = info[2]
+        local seat_id = info[3]
+        table.insert(player_ids, player_id)
+        player_tables["" .. player_id] = table_id
+        player_seats["" .. player_id] = seat_id
+    end
+
+    local info = string_split(parts[2], ":")
+    result.data.game_id = info[1] 
+    result.data.table_id = info[2]
 
     -- add players to game runtime set, set is cleared before add
     local game_runtime = Game_Runtime:new(instance)
@@ -309,6 +326,14 @@ _handlePLAYERLIST = function (parts, args)
 
     result.data.msg = #dbres .. " players(s) found"
     result.data.players = dbres
+    local index = 1
+    while index <= #result.data.players do
+        local id_found = "" .. result.data.players[index].id
+        result.data.players[index].table_no = player_tables[id_found]
+        result.data.players[index].seat_no = player_seats[id_found]
+        index = index + 1
+    end
+
     return result
 end
 

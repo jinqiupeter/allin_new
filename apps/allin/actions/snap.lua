@@ -71,7 +71,7 @@ _handleGameState = function (snap_value, args)
     local table_id = args.table_id
 
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
     local self = args.self
 
     local sql = ""
