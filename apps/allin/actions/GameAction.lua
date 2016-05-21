@@ -1237,7 +1237,10 @@ function GameAction:useractionAction(args)
         return result
     end 
 
-    return 
+    result.data.user_action = user_action
+    result.data.state = 0
+    result.data.msg = "user action sent"
+    return result
 end
 
 function GameAction:processMessage(message, mysql)
