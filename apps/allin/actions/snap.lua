@@ -61,6 +61,56 @@ function Snap:_updateGameStake(occupied_seats, args)
     end
 end
 
+function Snap:_exchangeStakeToGold(args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local mysql = args.mysql
+
+    local sql = "SELECT game_mode, buying_gold, buying_stake FROM game WHERE id = " .. game_id 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
+        return 
+    end
+    local game_mode = dbres[1].game_mode
+    local buying_gold = dbres[1].buying_gold
+    local buying_stake = dbres[1].buying_stake
+    local buying_rate = buying_stake / buying_gold
+    if game_mode ~= Constants.GameMode.GameModeRingGame then
+        cc.printdebug("only Sit&Go games should change stake to gold in the end")
+        return
+    end
+
+    local sql  = " SELECT user_id, stake as stake_ended FROM game_stake WHERE updated_at IN ( "
+               .. " SELECT  MAX(updated_at) AS updated_at FROM game_stake WHERE game_id = " .. game_id .. " GROUP BY user_id " 
+               .. " ) "
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
+        return
+    end
+
+    local index = 1
+    while index <= #dbres do
+        local user_found = dbres[index].user_id
+        local stake_ended = dbres[index].stake_ended
+
+        -- update user.gold
+        local sql = "UPDATE user SET gold = gold + " .. buying_stake / buying_rate
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+            return 
+        end
+
+        index = index + 1
+    end
+
+end
+
 _handleGameState = function (snap_value, args)
     local self = args.self
     --tcp: SNAP 1:0 1 <<1>>
@@ -91,6 +141,11 @@ _handleGameState = function (snap_value, args)
         sql = " UPDATE user_game_history SET ended_at = NOW() "
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. instance:getCid()
+
+        -- exchange user stake back to gold
+        if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
+            self:_exchangeStakeToGold({game_id = game_id, table_id = table_id, mysql = mysql})
+        end
     end
 
     if sql ~= "" then
@@ -202,7 +257,7 @@ _handleTable = function (snap_value, args)
 
     -- only dealer should update game_stake table
     if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
-        self:_updateGameStake(occupied_seats, {game_id = game_id, table_id = table_id, mysql = instance:getMysql()})
+        self:_updateGameStake(occupied_seats, {game_id = game_id, table_id = table_id, mysql = args.mysql})
     end
 
     -- pots
@@ -231,7 +286,7 @@ end
 _handleCards = function (snap_value, args)
     -- tcp: SNAP 1:0 3 <1 Kc 3s>
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
     local game_id = args.game_id
     local table_id = args.table_id
     local self = args.self
@@ -302,7 +357,7 @@ _handleWinAmount = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
 
     local value = {}
     local player_id = snap_value[1]
@@ -340,7 +395,7 @@ _handleWinPot = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
 
     local value = {}
     local player_id = snap_value[1]
@@ -384,7 +439,7 @@ _handleOddChips = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
     -- tcp: SNAP 1:0 8 <1 0 120> ==><1=cid, 0=>pot id, 120=amount received>
     local value = {}
     local player_id = snap_value[1]
@@ -429,7 +484,7 @@ _handlePlayerAction = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
 
     local value = {}
     local action_type = tonumber(snap_value[1])
@@ -501,7 +556,7 @@ _handlePlayerShow = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local instance = args.instance
-    local mysql = instance:getMysql()
+    local mysql = args.mysql
 
     -- tcp: SNAP 1:0 12 <0 Jh 4c 5c 2d Th 9c 9h> ==><0=cid, Jh 4c 5c 2d Th 9c 9h=player cards>
     local value = {}
