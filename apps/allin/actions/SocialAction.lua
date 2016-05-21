@@ -223,6 +223,7 @@ function SocialAction:sendprivatemessageAction(args)
     online:sendMessage(target_id, json.encode(message))
 
     result.data.state = 0
+	result.data.content_type = content_type
     result.data.target_id = target_id
     result.data.target_name = target_name
     result.data.msg = content
