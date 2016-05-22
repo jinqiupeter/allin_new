@@ -38,23 +38,25 @@ local _buyStake = function (required_stake, args)
     local blinds_start = args.blinds_start
     local gold_needed = args.gold_needed
 
-    -- check if user has already played the game, if yes then take stake left
-    local sql = "SELECT stake, updated_at FROM game_stake WHERE "
-             .. " game_id = " .. game_id 
-             .. " AND user_id = " .. instance:getCid()
-             .. " ORDER BY updated_at DESC LIMIT 1"
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.printdebug("db err: %s", err)
-        return {status = 1, stake_bought = 0, err = "db err: " .. err}
-    end
-    if #dbres ~= 0 then
-        -- user has played the game
-        local stake_left = dbres[1].stake
-        if (tonumber(stake_left) < tonumber(blinds_start)) then
-            cc.printdebug("stake left is larger than blinds_start, no need to buy")
-            return {status = 0, stake_bought = stake_left}
+    if not ignore_stake_left then
+        -- check if user has already played the game, if yes then take stake left
+        local sql = "SELECT stake, updated_at FROM game_stake WHERE "
+                 .. " game_id = " .. game_id 
+                 .. " AND user_id = " .. instance:getCid()
+                 .. " ORDER BY updated_at DESC LIMIT 1"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.printdebug("db err: %s", err)
+            return {status = 1, stake_bought = 0, err = "db err: " .. err}
+        end
+        if #dbres ~= 0 then
+            -- user has played the game
+            local stake_left = dbres[1].stake
+            if (tonumber(stake_left) < tonumber(blinds_start)) then
+                cc.printdebug("stake left is larger than blinds_start, no need to buy")
+                return {status = 0, stake_bought = stake_left}
+            end
         end
     end
 
@@ -883,6 +885,73 @@ function GameAction:joingameAction(args)
     end 
 
     --TODO: add user to leancloud channel to receive reminder
+    return 
+end
+
+function GameAction:rebuyAction(args)
+    local data = args.data
+    local game_id = data.game_id
+    local msgid = args.__id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not game_id then
+        result.data.msg = "game_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"game_id\"")
+        return result
+    end
+
+    self._currentAction = args.action
+    self._msgid = msgid
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local sql = "SELECT * FROM game WHERE id = " .. game_id 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if #dbres == 0 then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg   = "game with id: " .. game_id .. " not found"
+        return result
+    end
+    local game = dbres[1]
+
+    -- buy required stake no matter if user has stake left
+    local required_stake  = game.buying_stake
+    local res = _buyStake(required_stake, {instance = instance, 
+                                                mysql = mysql, 
+                                                game_id = game_id,
+                                                ignore_stake_left = true,
+                                                blinds_start = game.blinds_start,
+                                                gold_needed = game.buying_gold
+                                                })
+    if res.status ~= 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "failed to buy stake: " .. res.err
+        return result
+    end
+    local rebuy_stake = res.stake_bought
+
+    local message = msgid .. " REBUY " .. game_id .. " " .. rebuy_stake ..  "\n";
+    cc.printdebug("sending message to allin server: %s", message)
+    local instance = self:getInstance()
+    local allin = instance:getAllin()
+
+    local bytes, err = allin:sendMessage(message)
+    if not bytes then
+        result.data.state = Constants.Error.AllinError
+        result.data.msg = err
+        cc.printwarn("failed to send message: %s", err)
+        return result
+    end 
+
     return 
 end
 
