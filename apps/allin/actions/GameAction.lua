@@ -53,7 +53,7 @@ local _buyStake = function (required_stake, args)
         if #dbres ~= 0 then
             -- user has played the game
             local stake_left = dbres[1].stake
-            if (tonumber(stake_left) < tonumber(blinds_start)) then
+            if (tonumber(stake_left) > tonumber(blinds_start)) then
                 cc.printdebug("stake left is larger than blinds_start, no need to buy")
                 return {status = 0, stake_bought = stake_left}
             end
