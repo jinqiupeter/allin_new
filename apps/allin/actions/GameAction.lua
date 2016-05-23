@@ -891,6 +891,7 @@ end
 function GameAction:rebuyAction(args)
     local data = args.data
     local game_id = data.game_id
+    local amount = data.amount
     local msgid = args.__id
     local result = {state_type = "action_state", data = {
         action = args.action}
@@ -900,6 +901,13 @@ function GameAction:rebuyAction(args)
         result.data.msg = "game_id not provided"
         result.data.state = Constants.Error.ArgumentNotSet
         cc.printinfo("argument not provided: \"game_id\"")
+        return result
+    end
+
+    if not amount then
+        result.data.msg = "amount not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"amount\"")
         return result
     end
 
@@ -924,13 +932,13 @@ function GameAction:rebuyAction(args)
     local game = dbres[1]
 
     -- buy required stake no matter if user has stake left
-    local required_stake  = game.buying_stake
+    local required_stake  = amount
     local res = _buyStake(required_stake, {instance = instance, 
                                                 mysql = mysql, 
                                                 game_id = game_id,
                                                 ignore_stake_left = true,
                                                 blinds_start = game.blinds_start,
-                                                gold_needed = game.buying_gold
+                                                gold_needed = amount
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
