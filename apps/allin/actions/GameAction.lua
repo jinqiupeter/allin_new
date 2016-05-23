@@ -74,7 +74,8 @@ local _buyStake = function (required_stake, args)
     end
 
     -- update user.gold
-    sql = "UPDATE user SET gold = " .. gold_available - gold_needed .. " WHERE id = " .. instance:getCid()
+    local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -300,14 +301,17 @@ _handlePLAYERLIST = function (parts, args)
     local player_ids = {}
     local player_seats = {}
     local player_tables = {}
+    local player_stakes = {}
     for key, value in pairs(player_info) do
         local info = string_split(value, ":")
         local player_id = info[1]
         local table_id = info[2]
         local seat_id = info[3]
+        local player_stake = info[4]
         table.insert(player_ids, player_id)
         player_tables["" .. player_id] = table_id
         player_seats["" .. player_id] = seat_id
+        player_stakes["" .. player_id] = player_stake
     end
 
     local info = string_split(parts[2], ":")
@@ -336,6 +340,7 @@ _handlePLAYERLIST = function (parts, args)
         local id_found = "" .. result.data.players[index].id
         result.data.players[index].table_no = player_tables[id_found]
         result.data.players[index].seat_no = player_seats[id_found]
+        result.data.players[index].player_stake = player_stakes[id_found]
         index = index + 1
     end
 
@@ -960,7 +965,10 @@ function GameAction:rebuyAction(args)
         return result
     end 
 
-    return 
+    result.data.state = 0
+    result.data.stake_bought = rebuy_stake
+    result.data.msg = "stake bought: " .. rebuy_stake
+    return result
 end
 
 function GameAction:leavegameAction(args)
