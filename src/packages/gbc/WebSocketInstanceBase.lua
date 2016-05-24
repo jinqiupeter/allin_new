@@ -190,6 +190,7 @@ function WebSocketInstanceBase:runEventLoop()
                 frames[#frames + 1] = frame
                 frame = table_concat(frames)
                 frames = {}
+                ftype = "text"
             end
 
             if ftype == "close" then
