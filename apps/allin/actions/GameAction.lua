@@ -37,6 +37,7 @@ local _buyStake = function (required_stake, args)
     local game_id = args.game_id    -- create record in buying
     local blinds_start = args.blinds_start
     local gold_needed = args.gold_needed
+    local ignore_stake_left = args.ignore_stake_left
 
     if not ignore_stake_left then
         -- check if user has already played the game, if yes then take stake left
@@ -70,11 +71,12 @@ local _buyStake = function (required_stake, args)
     local gold_available = tonumber(dbres[1].gold)
     if gold_available < gold_needed then
         local err_mes = "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold available(" .. gold_available .. ")"
-        return {status = 1, stake_bought = 0, err = "err: " .. err}
+        return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
     end
 
     -- update user.gold
     local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
+    cc.printdebug("buying gold_needed %s, gold_to_charge: %s, gold_available: %s", gold_needed, gold_to_charge, gold_available)
     sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -670,6 +672,21 @@ function GameAction:creategameAction(args)
     if not game_id then
         result.data.state = Constants.Error.MysqlError
         result.data.msg = "failed to get next_id for table game, err: " .. err
+        return result
+    end
+
+    -- buy stake 
+    local required_stake  = buying_stake
+    local res = _buyStake(required_stake, {instance = instance, 
+                                                mysql = mysql, 
+                                                game_id = game_id,
+                                                ignore_stake_left = true,
+                                                blinds_start = blinds_start,
+                                                gold_needed = buying_gold
+                                                })
+    if res.status ~= 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "failed to buy stake: " .. res.err
         return result
     end
 
