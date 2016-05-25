@@ -66,7 +66,7 @@ end
 function SocialAction:updateinstallationAction(args)
     local data = args.data
     local result = {state_type = "action_state", data = {
-        action = data.action, state = 0, msg = "installation updated"}
+        action = args.action, state = 0, msg = "installation updated"}
     }
 
     local user_id = data.user_id
@@ -109,6 +109,50 @@ function SocialAction:updateinstallationAction(args)
         return result
     end
 
+    return result
+end
+
+function SocialAction:updatenicknameAction(args)
+    local data = args.data
+    local result = {state_type = "action_state", data = {
+        action = args.action, state = 0, msg = "nickname updated"}
+    }
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local user_id = instance:getCid()
+    local nickname = data.nickname
+
+    if not nickname then
+        result.data.state = Constants.Error.ArgumentNotSet
+        result.data.msg = "nickname not provided"
+        return
+    end
+
+    --check if phone is signed up
+    local sql = "select * from user where id = ".. user_id .. ";"
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误" .. err
+        return result
+    end
+    if next(dbres) == nil then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "user id " .. user_id .. " not found"
+        return result
+    end
+
+    local sql = "update user set nickname = " .. instance:sqlQuote(nickname) .. " where id = ".. user_id .. ";"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    result.data.nickname = nickname
     return result
 end
 
@@ -223,6 +267,7 @@ function SocialAction:sendprivatemessageAction(args)
     online:sendMessage(target_id, json.encode(message))
 
     result.data.state = 0
+	result.data.content_type = content_type
     result.data.target_id = target_id
     result.data.target_name = target_name
     result.data.msg = content

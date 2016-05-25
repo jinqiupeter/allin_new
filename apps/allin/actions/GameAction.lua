@@ -37,6 +37,7 @@ local _buyStake = function (required_stake, args)
     local game_id = args.game_id    -- create record in buying
     local blinds_start = args.blinds_start
     local gold_needed = args.gold_needed
+    local ignore_stake_left = args.ignore_stake_left
 
     if not ignore_stake_left then
         -- check if user has already played the game, if yes then take stake left
@@ -70,11 +71,13 @@ local _buyStake = function (required_stake, args)
     local gold_available = tonumber(dbres[1].gold)
     if gold_available < gold_needed then
         local err_mes = "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold available(" .. gold_available .. ")"
-        return {status = 1, stake_bought = 0, err = "err: " .. err}
+        return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
     end
 
     -- update user.gold
-    sql = "UPDATE user SET gold = " .. gold_available - gold_needed .. " WHERE id = " .. instance:getCid()
+    local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
+    cc.printdebug("buying gold_needed %s, gold_to_charge: %s, gold_available: %s", gold_needed, gold_to_charge, gold_available)
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -300,14 +303,17 @@ _handlePLAYERLIST = function (parts, args)
     local player_ids = {}
     local player_seats = {}
     local player_tables = {}
+    local player_stakes = {}
     for key, value in pairs(player_info) do
         local info = string_split(value, ":")
         local player_id = info[1]
         local table_id = info[2]
         local seat_id = info[3]
+        local player_stake = info[4]
         table.insert(player_ids, player_id)
         player_tables["" .. player_id] = table_id
         player_seats["" .. player_id] = seat_id
+        player_stakes["" .. player_id] = player_stake
     end
 
     local info = string_split(parts[2], ":")
@@ -336,6 +342,7 @@ _handlePLAYERLIST = function (parts, args)
         local id_found = "" .. result.data.players[index].id
         result.data.players[index].table_no = player_tables[id_found]
         result.data.players[index].seat_no = player_seats[id_found]
+        result.data.players[index].player_stake = player_stakes[id_found]
         index = index + 1
     end
 
@@ -668,6 +675,21 @@ function GameAction:creategameAction(args)
         return result
     end
 
+    -- buy stake 
+    local required_stake  = buying_stake
+    local res = _buyStake(required_stake, {instance = instance, 
+                                                mysql = mysql, 
+                                                game_id = game_id,
+                                                ignore_stake_left = true,
+                                                blinds_start = blinds_start,
+                                                gold_needed = buying_gold
+                                                })
+    if res.status ~= 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "failed to buy stake: " .. res.err
+        return result
+    end
+
     --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
     local message = msgid .. " CREATE game_id:"         .. game_id
                                 .. " type:"             .. game_mode 
@@ -891,6 +913,7 @@ end
 function GameAction:rebuyAction(args)
     local data = args.data
     local game_id = data.game_id
+    local amount = data.amount
     local msgid = args.__id
     local result = {state_type = "action_state", data = {
         action = args.action}
@@ -900,6 +923,13 @@ function GameAction:rebuyAction(args)
         result.data.msg = "game_id not provided"
         result.data.state = Constants.Error.ArgumentNotSet
         cc.printinfo("argument not provided: \"game_id\"")
+        return result
+    end
+
+    if not amount then
+        result.data.msg = "amount not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"amount\"")
         return result
     end
 
@@ -924,13 +954,13 @@ function GameAction:rebuyAction(args)
     local game = dbres[1]
 
     -- buy required stake no matter if user has stake left
-    local required_stake  = game.buying_stake
+    local required_stake  = amount
     local res = _buyStake(required_stake, {instance = instance, 
                                                 mysql = mysql, 
                                                 game_id = game_id,
                                                 ignore_stake_left = true,
                                                 blinds_start = game.blinds_start,
-                                                gold_needed = game.buying_gold
+                                                gold_needed = amount
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
@@ -952,7 +982,10 @@ function GameAction:rebuyAction(args)
         return result
     end 
 
-    return 
+    result.data.state = 0
+    result.data.stake_bought = rebuy_stake
+    result.data.msg = "stake bought: " .. rebuy_stake
+    return result
 end
 
 function GameAction:leavegameAction(args)
@@ -1347,7 +1380,10 @@ function GameAction:useractionAction(args)
         return result
     end 
 
-    return 
+    result.data.user_action = user_action
+    result.data.state = 0
+    result.data.msg = "user action sent"
+    return result
 end
 
 function GameAction:processMessage(message, mysql)

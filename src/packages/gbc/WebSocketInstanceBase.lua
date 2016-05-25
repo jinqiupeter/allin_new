@@ -150,6 +150,7 @@ function WebSocketInstanceBase:runEventLoop()
     -- event loop
     local frames = {}
     local running = true
+    local inspect = require("inspect")
     while running do
         self:heartbeat()
 
@@ -190,6 +191,7 @@ function WebSocketInstanceBase:runEventLoop()
                 frames[#frames + 1] = frame
                 frame = table_concat(frames)
                 frames = {}
+                ftype = "text"
             end
 
             if ftype == "close" then

@@ -122,6 +122,7 @@ function FinanceAction:verifyreceiptAction(args)
         return result
     end
     
+    local inspect = require("inspect")
     local url = "https://sandbox.itunes.apple.com/verifyReceipt"
     local body = { ["receipt-data"] = receipt }
     local json_body = json_encode(body)
@@ -130,10 +131,11 @@ function FinanceAction:verifyreceiptAction(args)
         ssl_verify = false,
         body = json_body,
     })
-    cc.printdebug("receipt verification status: %s", verification_result.body.status)
+    
+    local decoded_body = json_decode(verification_result.body)
+    cc.printdebug("receipt verification status: %s", decoded_body.status)
     -- alwasy update iap_receipt.verified = 1 no matter if receipt is valid or not
-    if not err then
-        local sql = "UPDATE iap_receipt set verified = 1 WHERE uuid = " ..instance:sqlQuote(order_id)
+    if not err then local sql = "UPDATE iap_receipt set verified = 1 WHERE uuid = " ..instance:sqlQuote(order_id)
         cc.printdebug("executing sql: %s", sql)
         local dbres, err, errno, sqlstate = mysql:query(sql)
         if not dbres then
@@ -143,12 +145,10 @@ function FinanceAction:verifyreceiptAction(args)
         end
     end
 
-    local body = json_decode(verification_result.body)
     local valid = 0
-    if tonumber(body.status) == 0 then
+    if tonumber(decoded_body.status) == 0 then
         valid = 1
     else
-        local inspect = require("inspect")
         cc.printdebug("verification_result: %s", inspect(body))
         result.data.state = 0
         result.data.is_valid = valid

@@ -73,9 +73,9 @@ local config = {
 
         -- mysql
         mysql = {
-            --socket    = "/var/mysqld/mysqld.socket",
-            host = "120.27.143.100",
-            port = 3306,
+            socket    = "/var/mysqld/mysqld.socket",
+            --host = "120.27.143.100",
+            --port = 3306,
             database  = 'allin',
             user      = 'allindbu',
             password  = 'Allin123'
@@ -83,7 +83,7 @@ local config = {
 
         allin = {
             --socket     = "unix:_GBC_CORE_ROOT_/tmp/redis.sock",
-            host       = "120.26.131.172",
+            host       = "120.27.143.100",
             port       = 50888,
             timeout    = 10 * 1000, -- 10 seconds
         },

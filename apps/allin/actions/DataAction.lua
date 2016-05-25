@@ -371,6 +371,7 @@ function DataAction:showgamedataAction(args)
     result.data.players_found = #dbres
     result.data.state = 0
     result.data.offset = offset
+    result.data.game_id = game_id
     return result
 end
 
