@@ -232,11 +232,11 @@ _handleTable = function (snap_value, args)
         local player_state          = tmp[3]  -- PlayerInRound(0x01) | PlayerSitout(0x02) 
         local in_round = 0
         if bit.band(0x01 ,tonumber(player_state)) > 0 then 
-            in_round = 0
+            in_round = 1
         end
         local sit_out = 0
         if bit.band(0x02 ,tonumber(player_state)) > 0 then 
-            sit_out = 0
+            sit_out = 1
         end
         local player_stake          = tmp[4]
         local bet_amount            = tmp[5] -- bet amount
