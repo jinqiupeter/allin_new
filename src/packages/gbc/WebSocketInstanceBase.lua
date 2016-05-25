@@ -150,6 +150,7 @@ function WebSocketInstanceBase:runEventLoop()
     -- event loop
     local frames = {}
     local running = true
+    local inspect = require("inspect")
     while running do
         self:heartbeat()
 
