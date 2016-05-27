@@ -15,13 +15,18 @@ local _updateUserGameHistory = function (mysql, args)
     local game_id = args.game_id
     local game_state = args.game_state
 
-    if tonumber(game_state) == Constants.GameState.GameStateWaiting then
-        local sql = "INSERT INTO user_game_history (user_id, game_id, joined_at) "
-                .. " VALUES (" .. user_id .. ", " 
-                .. game_id .. ", " 
-                .. " NOW())"
-              .. " ON DUPLICATE KEY UPDATE joined_at = NOW()" 
+    local sql = ""
+    if tonumber(game_state) == Constants.GameState.GameStateStarted then
+        sql = " UPDATE user_game_history SET started_at = NOW() "
+             .. " WHERE game_id = " .. game_id
+             .. " AND user_id = " .. user_id
+    elseif tonumber(game_state) == Constants.GameState.GameStateEnded then
+        sql = " UPDATE user_game_history SET ended = NOW() "
+             .. " WHERE game_id = " .. game_id
+             .. " AND user_id = " .. user_id
+    end
 
+    if sql ~= "" then
         cc.printdebug("executing sql: %s", sql)
         local dbres, err, errno, sqlstate = mysql:query(sql)
         if not dbres then
@@ -219,6 +224,13 @@ _handleGAMEINFO = function (parts, args)
     result.data.game_type = info[1] -- 1: GameTypeHoldem 
     result.data.game_mode = info[2] -- 1: Cash game, 2: Tournament, 3: SNG
     result.data.game_state = info[3] -- 1: GameStateWaiting, 2: GameStateStarted, 3: GameStateEnded 
+
+    if tonumber(result.data.game_state) == Constants.GameState.GameStateEnded then
+        -- delete game info because it's not needed anymore
+        local game_runtime = Game_Runtime:new(instance)
+        game_runtime:deleteInfo(result.data.game_id)
+    end
+
     --info[4] is combination of : GameInfoRegistered = 0x01, GameInfoPassword = 0x02, GameInfoRestart = 0x04, GameInfoOwner = 0x08, GameInfoSubscribed  = 0x10,
     result.data.is_player = 0
     if bit.band(0x01 ,tonumber(info[4])) > 0 then 
@@ -258,29 +270,6 @@ _handleGAMEINFO = function (parts, args)
     result.data.blinds_time         = info[3]
 
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
-
-    --[[
-    -- send new game to all online users of the club
-    cc.printdebug("sending new game info to all users in club %s", args.club_id)
-    local message = {state_type = "server_push", data = {push_type = "game.newgame"}}
-    message.data.name = result.data.name
-    message.data.stake = result.data.stake
-    message.data.blinds_time = result.data.blinds_time
-    message.data.blinds_start = result.data.blinds_start
-    message.data.blinds_factor = result.data.blinds_factor
-    message.data.timeout = result.data.timeout
-    message.data.max_players = result.data.max_players
-    message.data.player_count = result.data.player_count
-    message.data.password_protected = result.data.password_protected
-    message.data.game_type = result.data.game_type
-    message.data.game_id = result.data.game_id
-    message.data.game_type = result.data.game_type
-    message.data.auto_restart = result.data.auto_restart
-    message.data.game_mode = result.data.game_mode
-    message.data.created_by = args.user_id
-    local online = args.instance:getOnline()
-    online:sendClubMessage(args.club_id or 0, message)
-    --]]
 
     return result
 end
@@ -784,7 +773,24 @@ function GameAction:creategameAction(args)
             cc.printdebug("failed to push message: %s", err)
             return result
         end
+    end
 
+    -- set GameState to start and GameAmount to blinds_start
+    local game_runtime = Game_Runtime:new(instance)
+    game_runtime:setGameInfo(game_id, "GameState", Constants.Snap.GameState.SnapGameStateStart)
+    game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
+    game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
+
+    -- creator is automatically joined into the game
+    local sql = "INSERT INTO user_game_history (user_id, game_id, joined_at) "
+            .. " VALUES (" .. instance:getCid() .. ", " 
+            .. game_id .. ", " 
+            .. " NOW())"
+          .. " ON DUPLICATE KEY UPDATE joined_at = NOW()" 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
     end
 
     return 
@@ -905,6 +911,18 @@ function GameAction:joingameAction(args)
         cc.printwarn("failed to send message: %s", err)
         return result
     end 
+
+    -- creating new record in user_game_history 
+    local sql = "INSERT INTO user_game_history (user_id, game_id, joined_at) "
+            .. " VALUES (" .. instance:getCid() .. ", " 
+            .. game_id .. ", " 
+            .. " NOW())"
+          .. " ON DUPLICATE KEY UPDATE joined_at = NOW()" 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
+    end
 
     --TODO: add user to leancloud channel to receive reminder
     return 
@@ -1199,7 +1217,6 @@ function GameAction:startgameAction(args)
         return result
     end
 
-    -- at least 2 players are required. user_game_history records are added in handleGameInfo
     local game_runtime = Game_Runtime:new(instance)
     local player_count = game_runtime:getPlayerCount(game_id)
     if tonumber(player_count) < 2 then

@@ -43,68 +43,27 @@ function Game_Runtime:isPlayer(game_id, player_id)
     return self._redis:sismember(_GAME_RUNTIME_SET .. game_id, player_id)
 end
 
-function Game_Runtime:setStartedAt(game_id, started_at)
+function Game_Runtime:setGameInfo(game_id, field, value)
     local redis = self._redis
     redis:initPipeline()
-    redis:hset(_GAME_RUNTIME_INFO .. game_id, "started_at", started_at)
+    redis:hset(_GAME_RUNTIME_INFO .. game_id, field, value)
     return redis:commitPipeline()
 end
 
-function Game_Runtime:getStartedAt(game_id)
+function Game_Runtime:getGameInfo(game_id, field)
     local redis = self._redis
-    local started_at, err = redis:hget(_GAME_RUNTIME_INFO .. game_id, "started_at")
+    local result, err = redis:hget(_GAME_RUNTIME_INFO .. game_id, field)
 
-    if not started_at then
+    if not result then
         return nil, err
     end
-    if started_at == redis.null then
-        return nil, string_format("started_at not found in hash %s", _GAME_RUNTIME_INFO .. game_id)
+    if result == redis.null then
+        return nil, string_format(field .. " not found in hash %s", _GAME_RUNTIME_INFO .. game_id)
     end
 
-    return started_at
+    return result
 end
 
-function Game_Runtime:setBlindAmount(game_id, blind_amount)
-    local redis = self._redis
-    redis:initPipeline()
-    redis:hset(_GAME_RUNTIME_INFO .. game_id, "blind_amount", blind_amount)
-    return redis:commitPipeline()
-end
-
-function Game_Runtime:getBlindAmount(game_id)
-    local redis = self._redis
-    local blind_amount, err = redis:hget(_GAME_RUNTIME_INFO .. game_id, "blind_amount")
-
-    if not blind_amount then
-        return nil, err
-    end
-    if blind_amount == redis.null then
-        return nil, string_format("blind_amount not found in hash %s", _GAME_RUNTIME_INFO .. game_id)
-    end
-
-    return blind_amount
-end
-
-function Game_Runtime:setGameState(game_id, game_state)
-    local redis = self._redis
-    redis:initPipeline()
-    redis:hset(_GAME_RUNTIME_INFO .. game_id, "game_state", game_state)
-    return redis:commitPipeline()
-end
-
-function Game_Runtime:getGameState(game_id)
-    local redis = self._redis
-    local game_state, err = redis:hget(_GAME_RUNTIME_INFO .. game_id, "game_state")
-
-    if not game_state then
-        return nil, err
-    end
-    if game_state == redis.null then
-        return nil, string_format("game_state not found in hash %s", _GAME_RUNTIME_INFO .. game_id)
-    end
-
-    return game_state
-end
 
 function Game_Runtime:deleteInfo(game_id)
     local redis = self._redis

@@ -1,5 +1,6 @@
 local Snap       = cc.class("Snap")
 local Constants  = cc.import(".Constants", "..")
+local Game_Runtime = cc.import("#game_runtime")
 
 local string_split       = string.split
 local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR
@@ -137,14 +138,24 @@ _handleGameState = function (snap_value, args)
         sql = " UPDATE user_game_history SET started_at = NOW() "
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. instance:getCid()
+             
+        -- set game state to Start. SnapGameStateStart is send in PlaceTable(), so only 
+        local game_runtime = Game_Runtime:new(instance)
+        game_runtime:setGameInfo(game_id, "GameState", game_state)
+        game_runtime:setGameInfo(game_id, "StartedAt", os.time())
+
     elseif game_state == Constants.Snap.GameState.SnapGameStateEnd then
         sql = " UPDATE user_game_history SET ended_at = NOW() "
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. instance:getCid()
 
-        -- exchange user stake back to gold
         if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
+            -- exchange user stake back to gold
             self:_exchangeStakeToGold({game_id = game_id, table_id = table_id, mysql = mysql})
+
+            -- delete game info because it's not needed anymore
+            local game_runtime = Game_Runtime:new(instance)
+            game_runtime:deleteInfo(game_id)
         end
     end
 
@@ -208,6 +219,8 @@ _handleTable = function (snap_value, args)
         value.dealer            = tmp[1]
         value.sb                = tmp[2]
         value.bb                = tmp[3]
+
+
         value.current_player    = tmp[4]
         value.last_bet_player   = tmp[5]
     end
@@ -250,6 +263,7 @@ _handleTable = function (snap_value, args)
 
         occupied_seats[i] = {seat_no = seat_no, player_id = player_id, in_round = in_round, sit_out = sit_out, player_stake = player_stake, bet_amount = bet_amount, last_action = last_action, hole_cards = hole_cards}
 
+
         head = table.remove(snap_value, 1)
         i = i + 1
     end
@@ -277,6 +291,15 @@ _handleTable = function (snap_value, args)
     end
     value.pots = pots 
 
+    -- current blind amount
+    value.blind_amount = head
+    -- update game.blind_amount
+    if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
+        local game_runtime = Game_Runtime:new(instance)
+        game_runtime:setGameInfo(game_id, "BlindAmount", value.blind_amount)
+    end
+
+    head = table.remove(snap_value, 1)
     -- minimum bet amount
     value.minimus_bet = head
 
