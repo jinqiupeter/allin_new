@@ -5,6 +5,7 @@ _M.TABLE_CHAT_CHANNEL_PREFIX            = "_TABLE_CHAT_"
 
 _M.MESSAGE_FORMAT_JSON                  = "json"
 
+
 _M.Snap = {
     SnapType = {
         SnapGameState       = 0x01,
@@ -103,5 +104,8 @@ _M.Limit = {
 _M.Config = {
     GoldToStakeRate = 10
 }
+
+_M.IAP_SANDBOX_URL                  = "https://sandbox.itunes.apple.com/verifyReceipt"
+_M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceipt"
 
 return table.readonly(_M)

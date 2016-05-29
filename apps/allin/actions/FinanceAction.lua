@@ -123,7 +123,8 @@ function FinanceAction:verifyreceiptAction(args)
     end
     
     local inspect = require("inspect")
-    local url = "https://sandbox.itunes.apple.com/verifyReceipt"
+    --local url = Constants.IAP_SANDBOX_URL
+    local url = Constants.IAP_BUY_URL
     local body = { ["receipt-data"] = receipt }
     local json_body = json_encode(body)
     local verification_result, err = httpc:request_uri(url, {
