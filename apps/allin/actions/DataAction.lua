@@ -1,5 +1,6 @@
 local string_split       = string.split
 local Constants = cc.import(".Constants", "..")
+local Game_Runtime = cc.import("#game_runtime")
 local gbc = cc.import("#gbc")
 local json = cc.import("#json")
 local DataAction = cc.class("DataAction", gbc.ActionBase)
@@ -372,6 +373,17 @@ function DataAction:showgamedataAction(args)
     result.data.state = 0
     result.data.offset = offset
     result.data.game_id = game_id
+    
+    local game_runtime = Game_Runtime:new(instance)
+    local started_at = game_runtime:getGameInfo(game_id, "StartedAt")
+    local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
+    local duration = game_runtime:getGameInfo(game_id, "Duration")
+    result.data.started_at = started_at
+    result.data.blind_amount = blind_amount
+    result.data.duration = duration
+    result.data.time_elapsed = os.time() - started_at
+
+
     return result
 end
 
