@@ -2,6 +2,7 @@ local Online = cc.import("#online")
 local Leancloud = cc.import("#leancloud")
 local Session = cc.import("#session")
 local Constants = cc.import(".Constants", "..")
+local Helper = cc.import(".Helper", "..")
 
 local gbc = cc.import("#gbc")
 local AuthAction = cc.class("AuthAction", gbc.ActionBase)
@@ -104,10 +105,11 @@ function AuthAction:signupAction(args)
         return result
     end
 
-    local sql = "insert into user (phone, password, nickname) "
-                                                 .. " values (\'" .. phone .. "\', "
-                                                             .. "\'" .. password .. "\', "
-                                                             .. "\'" .. nickname .. "\');"
+    local sql = "insert into user (phone, password, nickname, gold) "
+                 .. " values (" .. instance:sqlQuote(phone) .. ", "
+                 ..  instance:sqlQuote(password) .. ", "
+                 ..  instance:sqlQuote(nickname) .. ", "
+                 ..  Helper:getSystemConfig(instance, "new_registration_gold") .. ");"
 
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
