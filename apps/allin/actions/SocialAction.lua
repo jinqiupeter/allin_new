@@ -96,6 +96,7 @@ function SocialAction:gametablechatAction(args)
 
     local instance = self:getInstance()
     local redis = instance:getRedis()
+    local mysql = instance:getMysql()
     if content_type == "animation" then
         local bought, err = _buyAnimation(content, {instance = instance}) 
         if not bought then
@@ -103,6 +104,21 @@ function SocialAction:gametablechatAction(args)
             result.data.state = Constants.Error.PermissionDenied
             return result
         end 
+
+        -- create animation buying history
+        local sql = "INSERT INTO animation_purchase (name, from_user, to_user, game_id, table_id) VALUES ("
+                    .. instance:sqlQuote(content) .. ", "
+                    .. instance:getCid() .. ", "
+                    .. target_id .. ", "
+                    .. game_id .. ", "
+                    .. table_id .. ")"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            result.data.msg = "数据库错误: " .. err
+            result.data.state = Constants.Error.MysqlError
+            return result
+        end
     end
 
 
