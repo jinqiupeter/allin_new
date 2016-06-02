@@ -7,6 +7,7 @@ local Constants = cc.import(".Constants", "..")
 GameAction.ACCEPTED_REQUEST_TYPE = "websocket"
 
 local Game_Runtime = cc.import("#game_runtime")
+local User_Runtime = cc.import("#user_runtime")
 
 -- private
 local snap = cc.import(".snap")
@@ -165,7 +166,7 @@ _handleGAMELIST = function (parts, args)
         club_id_condition  = "(" .. table.concat(instance:getClubIds(mysql), ", ") .. ")"
     end
 
-    local sql = "SELECT g.id, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, game_mode, u.nickname "
+    local sql = "SELECT g.id, CASE WHEN g.password != '' THEN 1 ELSE 0 END AS password_protected, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, game_mode, u.nickname "
                 .. " FROM game g, club c, user u, user_game_history ug"
                 .. " WHERE g.deleted != 1 "
                 .. " AND g.id IN " .. game_id_condition 
@@ -309,10 +310,6 @@ _handlePLAYERLIST = function (parts, args)
     local info = string_split(parts[2], ":")
     result.data.game_id = info[1] 
     result.data.table_id = info[2]
-
-    -- add players to game runtime set, set is cleared before add
-    local game_runtime = Game_Runtime:new(instance)
-    game_runtime:setPlayers(result.data.game_id, player_ids)
 
     if #player_ids < 1 then
         player_ids[1] = -1
@@ -692,7 +689,7 @@ function GameAction:creategameAction(args)
                                 .. " blinds_start:"     .. blinds_start
                                 .. " blinds_factor:"    .. (extra.blinds_factor or 12)
                                 .. " blinds_time:"      .. (extra.blinds_time or 30)
-                                .. " password:"         .. password
+                                .. " password:"         .. ""  -- password will be checked by gbc in game.joingame
                                 .. " expire_in:"        .. (extra.duration or 0)
                                 .. " \"name:"           .. name .. "\""
                                 .. "\n" -- '\n' is mandatory
@@ -783,7 +780,12 @@ function GameAction:creategameAction(args)
     local game_runtime = Game_Runtime:new(instance)
     game_runtime:setGameInfo(game_id, "GameState", Constants.Snap.GameState.SnapGameStateStart)
     game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
+    game_runtime:setGameInfo(game_id, "GameMode", game_mode)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
+
+    -- add the game to user's joined games list
+    local user_runtime = User_Runtime:new(instance)
+    user_runtime:joinGame(game_id)
 
     -- creator is automatically joined into the game
     local sql = "INSERT INTO user_game_history (user_id, game_id, joined_at) "
@@ -888,13 +890,24 @@ function GameAction:joingameAction(args)
     self._currentAction = args.action
     self._msgid = msgid
 
+    -- check password
+    if game.password ~= "" and password ~= game.password then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.WrongPassword
+        return result
+    end
+
+    -- stake left must be larger than current blind amount, which is created in game.creategame and updated in snap.TableSnap
+    local game_runtime = Game_Runtime:new(instance)
+    local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
+        
     -- buy required stake
     local required_stake  = game.buying_stake
     local res = _buyStake(required_stake, {instance = instance, 
                                                 mysql = mysql, 
                                                 game_id = game_id,
                                                 ignore_stake_left = false,
-                                                blinds_start = game.blinds_start,
+                                                blinds_start = blind_amount,
                                                 gold_needed = game.buying_gold
                                                 })
     if res.status ~= 0 then
@@ -904,7 +917,7 @@ function GameAction:joingameAction(args)
     end
     local player_stake = res.stake_bought
 
-    local message = msgid .. " REGISTER " .. game_id .. " " .. player_stake .. " " .. password .. "\n";
+    local message = msgid .. " REGISTER " .. game_id .. " " .. player_stake .. "\n";
     cc.printdebug("sending message to allin server: %s", message)
     local instance = self:getInstance()
     local allin = instance:getAllin()
@@ -928,6 +941,10 @@ function GameAction:joingameAction(args)
     if not dbres then
         cc.throw("db err: %s", err)
     end
+
+    -- add the game to user's joined games list
+    local user_runtime = User_Runtime:new(instance)
+    user_runtime:joinGame(game_id)
 
     --TODO: add user to leancloud channel to receive reminder
     return 
@@ -1042,6 +1059,10 @@ function GameAction:leavegameAction(args)
         cc.printwarn("failed to send message: %s", err)
         return result
     end 
+
+    -- remove the game to user's joined games list
+    local user_runtime = User_Runtime:new(instance)
+    user_runtime:leaveGame(game_id)
 
     return 
 end
@@ -1434,17 +1455,31 @@ end
 
 
 function GameAction:onDisconnect(event)
-    -- unregister all games user has registered
-    local message = " UNREGISTER -1 " .. "\n";
-    cc.printdebug("sending message to allin server: %s", message)
     local instance = self:getInstance()
     local allin = instance:getAllin()
+    local user_runtime = User_Runtime:new(instance)
+    local game_runtime = Game_Runtime:new(instance)
+    local joined_games = user_runtime:getJoinedGames()
 
-    local bytes, err = allin:sendMessage(message)
-    if not bytes then
-        local err = Constants.Error.AllinError
-        cc.printwarn("failed to send message: %s", err)
-    end 
+    -- unregister user in Sit&Go games
+    for key, value in pairs(joined_games) do
+        local game_mode = game_runtime:getGameInfo(value, "GameMode")
+        if game_mode ~= nil and tonumber(game_mode) == Constants.GameMode.GameModeRingGame then
+            cc.printdebug("removing user %s from game %s", instance:getCid(), value)
+
+            -- remove from holdinghuts
+            local message = " UNREGISTER  " .. value .. "\n";
+            cc.printdebug("sending message to allin server: %s", message)
+            local bytes, err = allin:sendMessage(message)
+            if not bytes then
+                local err = Constants.Error.AllinError
+                cc.printwarn("failed to send message: %s", err)
+            end 
+
+            -- remove from redis
+            user_runtime:leaveGame(value)
+        end
+    end
 end
 
 return GameAction

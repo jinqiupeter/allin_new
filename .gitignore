@@ -4,3 +4,4 @@ bin/
 db/
 allin_root/
 webroot/
+conf/server.db
