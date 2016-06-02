@@ -120,17 +120,17 @@ function WebSocketInstance:getClubIds(mysql_conn)
         cc.throw("mysql connection not provided. a 'context 2' error can occur")
     end
 
+    local clubs = {-1}
     local sql = "SELECT club_id from user_club WHERE deleted = 0 AND user_id = ".. self:getCid() .. ";"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
-        return nil
+        return clubs
     end
     if next(dbres) == nil then
-        return nil
+        return clubs
     end
     
-    local clubs = {}
     while next(dbres) ~= nil do
         table.insert(clubs, dbres[1].club_id)
         table.remove(dbres, 1)

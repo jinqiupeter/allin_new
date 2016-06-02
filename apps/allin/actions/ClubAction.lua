@@ -97,8 +97,10 @@ function ClubAction:clubinfoAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT id , name, owner_id, area, description" 
-                .. " FROM club WHERE id " .. club_id 
+    local sql = "SELECT c.id , name, owner_id, area, description, nickname as owner_name" 
+                .. " FROM club c, user u WHERE "
+                .. " c.id = " .. club_id 
+                .. " AND c.owner_id = u.id"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -129,10 +131,11 @@ function ClubAction:listjoinedclubAction(args)
     local user_clubs = instance:getClubIds(instance:getMysql())
     local condition = table.concat(user_clubs, ", ")
     local mysql = instance:getMysql()
-    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description, count(b.user_id) as total_members FROM club a, user_club b "
+    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description, count(b.user_id) as total_members , u.nickname as owner_name FROM club a, user_club b, user u "
                 .. " WHERE b.deleted = 0 AND "
                 .. " a.id = b.club_id AND "
-                .. " b.club_id in (" .. condition .. " ) group by b.club_id"
+                .. " u.id = a.owner_id AND"
+                .. " b.club_id in (" .. condition .. " ) group by b.club_id "
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -226,11 +229,12 @@ function ClubAction:listclubAction(args)
     local instance = self:getInstance()
     local mysql = instance:getMysql()
     local word = '%' .. keyword .. '%'
-    local sql = "SELECT id, name, owner_id, area, description" 
-                .. " FROM club WHERE name LIKE " .. instance:sqlQuote(word) 
-                .. " OR area LIKE " .. instance:sqlQuote(word) 
-                .. " OR description LIKE " .. instance:sqlQuote(word) 
-                .. " AND id NOT IN (SELECT club_id FROM user_club WHERE user_id = " .. instance:getCid() .. " AND deleted = 0) "
+    local sql = "SELECT c.id, name, owner_id, area, description, u.nickname as owner_name" 
+                .. " FROM club c, user u WHERE c.owner_id = u.id"
+                .. " AND c.id NOT IN (SELECT club_id FROM user_club WHERE user_id = " .. instance:getCid() .. " AND deleted = 0) "
+                .. " AND (c.name LIKE " .. instance:sqlQuote(word) 
+                .. " OR c.area LIKE " .. instance:sqlQuote(word) 
+                .. " OR c.description LIKE " .. instance:sqlQuote(word) .. ")"
                 .. " LIMIT " .. offset .. ", " .. limit
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)

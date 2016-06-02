@@ -1,4 +1,5 @@
 local string_split       = string.split
+local string_format = string.format
 local gbc = cc.import("#gbc")
 local GameAction = cc.class("GameAction", gbc.ActionBase)
 local WebSocketInstance = cc.import(".WebSocketInstance", "..")
@@ -21,7 +22,7 @@ local _updateUserGameHistory = function (mysql, args)
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. user_id
     elseif tonumber(game_state) == Constants.GameState.GameStateEnded then
-        sql = " UPDATE user_game_history SET ended = NOW() "
+        sql = " UPDATE user_game_history SET ended_at = NOW() "
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. user_id
     end
@@ -39,30 +40,30 @@ local _buyStake = function (required_stake, args)
     local required_stake = tonumber(required_stake)
     local instance = args.instance
     local mysql = args.mysql
-    local game_id = args.game_id    -- create record in buying
+    local game_id = args.game_id    
     local blinds_start = args.blinds_start
     local gold_needed = args.gold_needed
     local ignore_stake_left = args.ignore_stake_left
 
+    local sql = "SELECT stake_available FROM buying WHERE "
+         .. " game_id = " .. game_id 
+         .. " AND user_id = " .. instance:getCid()
+         .. " ORDER BY bought_at DESC LIMIT 1"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {status = 1, stake_bought = 0, err = "db err: " .. err}
+    end
+    local stake_left = 0
+    if #dbres ~= 0 then
+        stake_left = dbres[1].stake_available
+    end
     if not ignore_stake_left then
-        -- check if user has already played the game, if yes then take stake left
-        local sql = "SELECT stake, updated_at FROM game_stake WHERE "
-                 .. " game_id = " .. game_id 
-                 .. " AND user_id = " .. instance:getCid()
-                 .. " ORDER BY updated_at DESC LIMIT 1"
-        cc.printdebug("executing sql: %s", sql)
-        local dbres, err, errno, sqlstate = mysql:query(sql)
-        if not dbres then
-            cc.printdebug("db err: %s", err)
-            return {status = 1, stake_bought = 0, err = "db err: " .. err}
-        end
-        if #dbres ~= 0 then
-            -- user has played the game
-            local stake_left = dbres[1].stake
-            if (tonumber(stake_left) > tonumber(blinds_start)) then
-                cc.printdebug("stake left is larger than blinds_start, no need to buy")
-                return {status = 0, stake_bought = stake_left}
-            end
+        -- user has already joined the game, take stake left
+        if (tonumber(stake_left) > tonumber(blinds_start)) then
+            cc.printdebug("stake left is larger than blinds_start, no need to buy")
+            return {status = 0, stake_bought = stake_left}
         end
     end
 
@@ -74,14 +75,13 @@ local _buyStake = function (required_stake, args)
         return {status = 1, stake_bought = 0, err = "db err: " .. err}
     end
     local gold_available = tonumber(dbres[1].gold)
-    if gold_available < gold_needed then
-        local err_mes = "user(" .. instance:getCid() .. ") gold needed(" .. gold_needed .. ") is larger than gold available(" .. gold_available .. ")"
+    -- update user.gold
+    local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
+    if gold_available < gold_to_charge then
+        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnough, gold_available, gold_to_charge)
         return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
     end
 
-    -- update user.gold
-    local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
-    cc.printdebug("buying gold_needed %s, gold_to_charge: %s, gold_available: %s", gold_needed, gold_to_charge, gold_available)
     sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -91,11 +91,12 @@ local _buyStake = function (required_stake, args)
     end
     
     -- create record in buying
-    sql = "INSERT INTO buying (user_id, game_id, gold, stake) "
+    sql = "INSERT INTO buying (user_id, game_id, gold_spent, stake_bought, stake_available ) "
           .. " VALUES ( " .. instance:getCid() .. ", "
           .. game_id .. ", "
           .. gold_needed .. ", "
-          .. required_stake .. ")"
+          .. required_stake .. ", "
+          .. tonumber(required_stake) + tonumber(stake_left).. ")"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -313,6 +314,9 @@ _handlePLAYERLIST = function (parts, args)
     local game_runtime = Game_Runtime:new(instance)
     game_runtime:setPlayers(result.data.game_id, player_ids)
 
+    if #player_ids < 1 then
+        player_ids[1] = -1
+    end
     local player_id_condition = "(" .. table.concat(player_ids, ", ") .. ") "
     local sql = "SELECT id, nickname, phone FROM user where id in " .. player_id_condition
     cc.printdebug("executing sql: %s", sql)
@@ -675,7 +679,7 @@ function GameAction:creategameAction(args)
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "failed to buy stake: " .. res.err
+        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
         return result
     end
 
@@ -889,12 +893,13 @@ function GameAction:joingameAction(args)
     local res = _buyStake(required_stake, {instance = instance, 
                                                 mysql = mysql, 
                                                 game_id = game_id,
+                                                ignore_stake_left = false,
                                                 blinds_start = game.blinds_start,
                                                 gold_needed = game.buying_gold
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "failed to buy stake: " .. res.err
+        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
         return result
     end
     local player_stake = res.stake_bought
@@ -982,7 +987,7 @@ function GameAction:rebuyAction(args)
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "failed to buy stake: " .. res.err
+        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
         return result
     end
     local rebuy_stake = res.stake_bought

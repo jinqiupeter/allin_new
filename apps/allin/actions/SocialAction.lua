@@ -19,9 +19,11 @@ function SocialAction:gametablechatAction(args)
     local game_id  = data.game_id
     local table_id = data.table_id
     local content  = data.content
-    local message = {state_type = "chat_state", data = {
+    local target_id = data.target_id
+    local result = {state_type = "action_state", data = {
         action = args.action}
     }
+    local message = {state_type = "server_push", data = {push_type = "social.tablechat"}}
 
     if not game_id then
         cc.printinfo("argument not provided: \"game_id\"")
@@ -42,13 +44,15 @@ function SocialAction:gametablechatAction(args)
         return result
     end
 
-    local content_type = data.content_type or "text" -- can be "text" or "voice", voice messages should be base64 encrypted
+    local content_type = data.content_type or "text" 
+    local instance = self:getInstance()
+    local redis = instance:getRedis()
+
     message.data.content_type = content_type
     message.data.content = content
-
-    local instance = self:getInstance()
     message.data.sender_id  = instance:getCid()
-    local redis = instance:getRedis()
+    message.data.target_id  = target_id
+	message.data.game_id = game_id
 
     local table_channel = Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id)
     cc.printdebug("sending message to game: %s, table: %s, message: %s", game_id, table_id, json_encode(message))
@@ -60,6 +64,14 @@ function SocialAction:gametablechatAction(args)
         return result
     end
 
+    result.data.state = 0
+    result.data.msg = "message sent successfully"
+    result.data.content_type = content_type
+    result.data.content = content
+    result.data.game_id = game_id
+    result.data.table_id = table_id
+    result.data.sender_id  = instance:getCid()
+    result.data.target_id  = target_id
     return result
 end
 

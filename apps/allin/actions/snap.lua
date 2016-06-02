@@ -59,6 +59,24 @@ function Snap:_updateGameStake(occupied_seats, args)
             cc.throw("db err: %s", err)
         end
 
+        -- update stake_available in buying
+        local sub_query = "SELECT id FROM buying WHERE "
+         .. " game_id = " .. game_id 
+         .. " AND user_id = " .. user_id
+         .. " ORDER BY bought_at DESC LIMIT 1"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sub_query)
+        if not dbres then
+            cc.throw("db err: %s", err)
+        end
+        local last_id = dbres[1].id
+        local sql = " UPDATE buying SET stake_available = " .. stake
+                    .. " WHERE id =  " .. last_id 
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+        end
     end
 end
 
@@ -144,6 +162,7 @@ _handleGameState = function (snap_value, args)
         game_runtime:setGameInfo(game_id, "GameState", game_state)
         game_runtime:setGameInfo(game_id, "StartedAt", os.time())
 
+
     elseif game_state == Constants.Snap.GameState.SnapGameStateEnd then
         sql = " UPDATE user_game_history SET ended_at = NOW() "
              .. " WHERE game_id = " .. game_id
@@ -183,17 +202,13 @@ _handleTable = function (snap_value, args)
     local tmp = string_split(head, ":")
     local table_state = tonumber(tmp[1])
     value.table_state = table_state
-
-    -- table chat support
-    if table_state == Constants.Snap.TableState.NewRound then
-    -- subscribe to table channel to receive table chat
-        cc.printdebug("subscribing to table channel " .. Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id))
-        instance:subscribe(Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id))
-    elseif table_state == Constants.Snap.TableState.EndRound then
-    -- unsubscribe
-        instance:unsubscribe(Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id))
+    if tonumber(value.table_state) == Constants.Snap.TableState.NewRound then
+        -- subscribe to table channel
+        local channel = Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id)
+        cc.printdebug("user %s subscribing to table channel %s" , instance:getCid(),  channel)
+        instance:subscribeChannel(channel)
     end
-        
+
     local bet_round    = tmp[2]
     value.bet_round = bet_round
     local key = "" .. game_id .. "_" .. table_id

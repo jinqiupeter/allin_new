@@ -108,4 +108,9 @@ _M.Config = {
 _M.IAP_SANDBOX_URL                  = "https://sandbox.itunes.apple.com/verifyReceipt"
 _M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceipt"
 
+_M.ErrorMsg = {
+    FailedToBuy = "买入失败",
+    GoldNotEnough = "您的剩余金币(%s) 不足以支付本次买入(%s), 请充值！",
+}
+
 return table.readonly(_M)

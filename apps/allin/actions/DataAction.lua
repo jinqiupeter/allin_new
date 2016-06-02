@@ -49,7 +49,7 @@ function DataAction:gamesplayedAction(args)
                       .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
                       .. " AND user_id = " .. instance:getCid() 
                       .. " GROUP BY game_id"
-    local sql = "SELECT a.game_id, a.stake as stake_ended, c.ended_at, d.name, e.stake as stake_bought, (a.stake - e.stake) as result FROM "
+    local sql = "SELECT a.game_id, a.stake as stake_ended, c.ended_at, d.name, e.stake_bought, (a.stake - e.stake_bought) as result FROM "
     .. "game_stake a, "
     .. "(" .. sub_query .. ") b,"
     .. "user_game_history c, " 
@@ -114,13 +114,13 @@ function DataAction:analyzestyleAction(args)
  
     -- biggest bet, total action, vpip, wtsd, pfr
     local sql = "SELECT " 
-                .. " MAX (amount) AS biggest_bet, "
-                .. " COUNT (*) as total_action , "
-                .. " SUM (action_type IN (3, 4, 5, 6)) as vpip, " -- voluntarily put $ in pot
-                .. " SUM (bet_round = 3) as wtsd, "     -- went to showdown
-                .. " SUM (action_type in (4, 5) ) as total_bet_raise, "    
-                .. " SUM (action_type =3 ) as total_call, "     
-                .. " SUM (action_type = 5 and bet_round = 0 ) as pfr "    -- pre flop raise
+                .. " COALESCE(MAX(amount), 0) AS biggest_bet, "
+                .. " COALESCE(COUNT(*), 0) as total_action , "
+                .. " COALESCE(SUM(action_type IN (3, 4, 5, 6)), 0) as vpip, " -- voluntarily put $ in pot
+                .. " COALESCE(SUM(bet_round = 3), 0) as wtsd, "     -- went to showdown
+                .. " COALESCE(SUM(action_type in (4, 5)), 0) as total_bet_raise, "    
+                .. " COALESCE(SUM(action_type =3), 0) as total_call, "     
+                .. " COALESCE(SUM(action_type = 5 and bet_round = 0), 0) as pfr "    -- pre flop raise
                 .. " FROM user_action WHERE "
                 .. " user_id = " .. user_id
                 .. " AND performed_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
@@ -133,17 +133,25 @@ function DataAction:analyzestyleAction(args)
     end
     result.data.biggest_bet     = dbres[1].biggest_bet
     result.data.total_action    = dbres[1].total_action
-    result.data.vpip            = dbres[1].vpip
+    result.data.vpip            = dbres[1].vpip 
     result.data.wtsd            = dbres[1].wtsd
     result.data.total_bet_raise = dbres[1].total_bet_raise
-    result.data.total_call      = dbres[1].total_call
-    result.data.pfr             = dbres[1].pfr
-    result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
-    result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
+    result.data.total_call      = dbres[1].total_call 
+    result.data.pfr             = dbres[1].pfr 
+    if result.data.vpip == 0 then
+        result.data.vpip_rate = 0 
+    else
+        result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
+    end
+    if result.data.total_call == 0 then
+        result.data.af = result.data.total_bet_raise
+    else
+        result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
+    end
 
 
     -- total_hands_played
-    local total_hands_sql = "SELECT COUNT(hand_id) AS total_hands FROM game_stake"
+    local total_hands_sql = "SELECT COALESCE(COUNT(hand_id), 0) AS total_hands FROM game_stake"
                             .. " WHERE user_id = " .. user_id
                             .. " AND updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
     cc.printdebug("executing sql: %s", total_hands_sql)
@@ -154,11 +162,19 @@ function DataAction:analyzestyleAction(args)
         return result
     end
     result.data.total_hands = dbres[1].total_hands
-    result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
-    result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
+    if result.data.wtsd == 0 then
+        result.data.wtsd_rate = 0
+    else 
+        result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
+    end
+    if result.data.pfr == 0 then
+        result.data.pfr_rate = 0 
+    else
+        result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
+    end
 
     -- total_hands_won
-    local hands_won_sql = "SELECT COUNT(*) AS hands_won FROM game_winners"
+    local hands_won_sql = "SELECT COALESCE(COUNT(*), 0) AS hands_won FROM game_winners"
                             .. " WHERE winner_id = " .. user_id
                             .. " AND created_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
     cc.printdebug("executing sql: %s", hands_won_sql)
@@ -168,8 +184,12 @@ function DataAction:analyzestyleAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.hands_won = dbres[1].hands_won
-    result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
+    result.data.hands_won = dbres[1].hands_won or 0
+    if result.data.hands_won == 0 then
+        result.data.hands_won_rate = 0
+    else
+        result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
+    end
 
 
     -- wtsd and won
@@ -177,7 +197,7 @@ function DataAction:analyzestyleAction(args)
                       .. " WHERE bet_round = 3 "
                       .. " AND user_id = " .. user_id
                       .. " AND performed_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
-    local wtsd_won_sql = "SELECT COUNT(*) AS wtsd_won FROM game_winners a join "
+    local wtsd_won_sql = "SELECT COALESCE(COUNT(*), 0) AS wtsd_won FROM game_winners a join "
                             .. "(" .. sub_query .. ") b"
                             .. " ON (a.game_id = b.game_id AND a.table_id = b.table_id AND a.hand_id = b.hand_id) "
                             .. " WHERE a.winner_id = " .. user_id
@@ -189,8 +209,12 @@ function DataAction:analyzestyleAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.wtsd_won        = dbres[1].wtsd_won
-    result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
+    result.data.wtsd_won        = dbres[1].wtsd_won or 0
+    if result.data.wtsd_won == 0 then
+        result.data.wtsd_won_rate = 0
+    else 
+        result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
+    end
 
     result.data.state = 0
     return result
@@ -295,7 +319,7 @@ function DataAction:listgamesinclubAction(args)
     local sql = "SELECT ugh.game_id , g.name AS game_name, g.game_mode, ugh.ended_at, "
                 .. " ugh.ended_at - ugh.started_at AS duration, "
                 .. " COUNT(distinct ugh.user_id) AS players, "
-                .. " SUM(b.stake) / COUNT(distinct b.user_id) AS total_buying "
+                .. " SUM(b.stake_bought) / COUNT(distinct b.user_id) AS total_buying "
                 .. " FROM game g, user_game_history ugh, buying b"
                 .. " WHERE g.club_id = " .. club_id
                 .. " AND g.id = ugh.game_id "
@@ -346,8 +370,8 @@ function DataAction:showgamedataAction(args)
                        .. " SELECT  MAX(updated_at) AS updated_at FROM game_stake WHERE game_id = " .. game_id .. " GROUP BY user_id " 
                        .. " ) "
     local sql = "SELECT ugh.game_id, ugh.user_id, u.nickname, gs.stake as stake_ended, "
-                .. " SUM(b.stake) as total_buying, "
-                .. " gs.stake - SUM(b.stake) AS result"
+                .. " SUM(b.stake_bought) as total_buying, "
+                .. " gs.stake - SUM(b.stake_bought) AS result"
                 .. " FROM user u , "
                 .. "(" .. sub_query .. ") as gs,"
                 .. " buying b, user_game_history ugh "
@@ -408,13 +432,13 @@ function DataAction:analyzestyleingameAction(args)
  
     -- biggest bet, total action, vpip, wtsd, pfr
     local sql = "SELECT " 
-                .. " MAX (amount) AS biggest_bet, "
-                .. " COUNT (*) as total_action , "
-                .. " SUM (action_type IN (3, 4, 5, 6)) as vpip, " -- voluntarily put $ in pot
-                .. " SUM (bet_round = 3) as wtsd, "     -- went to showdown
-                .. " SUM (action_type in (4, 5) ) as total_bet_raise, "    
-                .. " SUM (action_type =3 ) as total_call, "     
-                .. " SUM (action_type = 5 and bet_round = 0 ) as pfr "    -- pre flop raise
+                .. " COALESCE(MAX(amount), 0) AS biggest_bet, "
+                .. " COALESCE(COUNT (*), 0) as total_action , "
+                .. " COALESCE(SUM(action_type IN (3, 4, 5, 6)), 0) as vpip, " -- voluntarily put $ in pot
+                .. " COALESCE(SUM(bet_round = 3), 0) as wtsd, "     -- went to showdown
+                .. " COALESCE(SUM(action_type in (4, 5) ), 0) as total_bet_raise, "    
+                .. " COALESCE(SUM(action_type =3), 0) as total_call, "     
+                .. " COALESCE(SUM(action_type = 5 and bet_round = 0), 0) as pfr "    -- pre flop raise
                 .. " FROM user_action WHERE "
                 .. " user_id = " .. user_id
                 .. " AND game_id = " .. game_id
@@ -425,19 +449,26 @@ function DataAction:analyzestyleingameAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.biggest_bet     = dbres[1].biggest_bet
-    result.data.total_action    = dbres[1].total_action
-    result.data.vpip            = dbres[1].vpip
+    result.data.biggest_bet     = dbres[1].biggest_bet 
+    result.data.total_action    = dbres[1].total_action  
+    result.data.vpip            = dbres[1].vpip 
     result.data.wtsd            = dbres[1].wtsd
     result.data.total_bet_raise = dbres[1].total_bet_raise
     result.data.total_call      = dbres[1].total_call
     result.data.pfr             = dbres[1].pfr
-    result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
-    result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
-
+    if result.data.vpip == 0 then
+        result.data.vpip_rate       = "0%"
+    else
+        result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
+    end
+    if result.data.total_call then
+        result.data.af = result.data.total_bet_raise
+    else 
+        result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
+    end
 
     -- total_hands_played
-    local total_hands_sql = "SELECT COUNT(hand_id) AS total_hands FROM game_stake"
+    local total_hands_sql = "SELECT COALESCE(COUNT(hand_id), 0) AS total_hands FROM game_stake"
                             .. " WHERE user_id = " .. user_id
                             .. " AND game_id = " .. game_id
     cc.printdebug("executing sql: %s", total_hands_sql)
@@ -448,11 +479,19 @@ function DataAction:analyzestyleingameAction(args)
         return result
     end
     result.data.total_hands = dbres[1].total_hands
-    result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
-    result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
+    if result.data.wtsd == 0 then
+        result.data.wtsd_rate = 0
+    else
+        result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
+    end
+    if result.data.pfr == 0 then
+        result.data.pfr_rate = 0 
+    else
+        result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
+    end
 
     -- total_hands_won
-    local hands_won_sql = "SELECT COUNT(*) AS hands_won FROM game_winners"
+    local hands_won_sql = "SELECT COALESCE(COUNT(*), 0) AS hands_won FROM game_winners"
                             .. " WHERE winner_id = " .. user_id
                             .. " AND game_id =  " .. game_id
     cc.printdebug("executing sql: %s", hands_won_sql)
@@ -462,8 +501,12 @@ function DataAction:analyzestyleingameAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.hands_won = dbres[1].hands_won
-    result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
+    result.data.hands_won = dbres[1].hands_won 
+    if result.data.hands_won == 0 then
+        result.data.hands_won_rate = 0
+    else
+        result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
+    end
 
 
     -- wtsd and won
@@ -471,7 +514,7 @@ function DataAction:analyzestyleingameAction(args)
                       .. " WHERE bet_round = 3 "
                       .. " AND user_id = " .. user_id
                       .. " AND game_id = " .. game_id
-    local wtsd_won_sql = "SELECT COUNT(*) AS wtsd_won FROM game_winners a join "
+    local wtsd_won_sql = "SELECT COALESCE(COUNT(*), 0) AS wtsd_won FROM game_winners a join "
                             .. "(" .. sub_query .. ") b"
                             .. " ON (a.game_id = b.game_id AND a.table_id = b.table_id AND a.hand_id = b.hand_id) "
                             .. " WHERE a.winner_id = " .. user_id
@@ -484,7 +527,11 @@ function DataAction:analyzestyleingameAction(args)
         return result
     end
     result.data.wtsd_won        = dbres[1].wtsd_won
-    result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
+    if result.data.wtsd_won == 0 then
+        result.data.wtsd_won_rate = 0
+    else
+        result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
+    end
 
     result.data.state = 0
     return result
