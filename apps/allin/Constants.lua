@@ -110,7 +110,10 @@ _M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceip
 
 _M.ErrorMsg = {
     FailedToBuy = "买入失败",
+    FailedToBuyAnimation = "购买表情失败",
     GoldNotEnough = "您的剩余金币(%s) 不足以支付本次买入(%s), 请充值！",
+    GoldNotEnoughAnimation = "您的剩余金币(%s) 不足以购买本表情(%s金币), 请充值！",
+    WrongPassword = "密码错误，请确认密码是否正确",
 }
 
 return table.readonly(_M)

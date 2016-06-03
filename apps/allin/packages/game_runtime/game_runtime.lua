@@ -31,6 +31,18 @@ function Game_Runtime:setPlayers(game_id, players)
     return self._redis:commitPipeline()
 end
 
+function Game_Runtime:addPlayer(game_id, user_id)
+    self._redis:initPipeline()
+    self._redis:sadd(_GAME_RUNTIME_SET .. game_id, user_id)
+    return self._redis:commitPipeline()
+end
+
+function Game_Runtime:removePlayer(game_id, user_id)
+    self._redis:initPipeline()
+    self._redis:srem(_GAME_RUNTIME_SET .. game_id, user_id)
+    return self._redis:commitPipeline()
+end
+
 function Game_Runtime:getPlayers(game_id)
     return self._redis:smembers(_GAME_RUNTIME_SET .. game_id)
 end

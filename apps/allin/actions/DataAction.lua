@@ -138,12 +138,12 @@ function DataAction:analyzestyleAction(args)
     result.data.total_bet_raise = dbres[1].total_bet_raise
     result.data.total_call      = dbres[1].total_call 
     result.data.pfr             = dbres[1].pfr 
-    if result.data.vpip == 0 then
-        result.data.vpip_rate = 0 
+    if tonumber(result.data.vpip) == 0 then
+        result.data.vpip_rate = "0%"
     else
         result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
     end
-    if result.data.total_call == 0 then
+    if tonumber(result.data.total_call) == 0 then
         result.data.af = result.data.total_bet_raise
     else
         result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
@@ -162,13 +162,13 @@ function DataAction:analyzestyleAction(args)
         return result
     end
     result.data.total_hands = dbres[1].total_hands
-    if result.data.wtsd == 0 then
-        result.data.wtsd_rate = 0
+    if tonumber(result.data.wtsd) == 0 then
+        result.data.wtsd_rate = "0%"
     else 
         result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
     end
-    if result.data.pfr == 0 then
-        result.data.pfr_rate = 0 
+    if tonumber(result.data.pfr) == 0 then
+        result.data.pfr_rate = "0%"
     else
         result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
     end
@@ -184,9 +184,9 @@ function DataAction:analyzestyleAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.hands_won = dbres[1].hands_won or 0
-    if result.data.hands_won == 0 then
-        result.data.hands_won_rate = 0
+    result.data.hands_won = dbres[1].hands_won
+    if tonumber(result.data.hands_won) == 0 then
+        result.data.hands_won_rate = "0%"
     else
         result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
     end
@@ -209,9 +209,9 @@ function DataAction:analyzestyleAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.wtsd_won        = dbres[1].wtsd_won or 0
-    if result.data.wtsd_won == 0 then
-        result.data.wtsd_won_rate = 0
+    result.data.wtsd_won        = dbres[1].wtsd_won
+    if tonumber(result.data.wtsd_won) == 0 then
+        result.data.wtsd_won_rate = "0%"
     else 
         result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
     end
@@ -456,12 +456,12 @@ function DataAction:analyzestyleingameAction(args)
     result.data.total_bet_raise = dbres[1].total_bet_raise
     result.data.total_call      = dbres[1].total_call
     result.data.pfr             = dbres[1].pfr
-    if result.data.vpip == 0 then
+    if tonumber(result.data.vpip) == 0 then
         result.data.vpip_rate       = "0%"
     else
         result.data.vpip_rate       = round(result.data.vpip / result.data.total_action  * 100, 1) .. "%"
     end
-    if result.data.total_call then
+    if tonumber(result.data.total_call) then
         result.data.af = result.data.total_bet_raise
     else 
         result.data.af              = result.data.total_bet_raise / result.data.total_call -- Aggression Factor
@@ -479,13 +479,13 @@ function DataAction:analyzestyleingameAction(args)
         return result
     end
     result.data.total_hands = dbres[1].total_hands
-    if result.data.wtsd == 0 then
-        result.data.wtsd_rate = 0
+    if tonumber(result.data.wtsd) == 0 then
+        result.data.wtsd_rate = "0%"
     else
         result.data.wtsd_rate = round(result.data.wtsd / result.data.total_hands * 100, 1)  .. "%"
     end
-    if result.data.pfr == 0 then
-        result.data.pfr_rate = 0 
+    if tonumber(result.data.pfr) == 0 then
+        result.data.pfr_rate = "0%" 
     else
         result.data.pfr_rate = round(result.data.pfr / result.data.total_hands * 100, 1)  .. "%"
     end
@@ -502,10 +502,13 @@ function DataAction:analyzestyleingameAction(args)
         return result
     end
     result.data.hands_won = dbres[1].hands_won 
-    if result.data.hands_won == 0 then
-        result.data.hands_won_rate = 0
+    cc.printdebug("result.data.hands_won: %s", result.data.hands_won)
+    if tonumber(result.data.hands_won) == 0 then
+        result.data.hands_won_rate = "0%"
+        cc.printdebug("result.data.hands_won_rate111: %s", result.data.hands_won_rate)
     else
         result.data.hands_won_rate = round(result.data.hands_won / result.data.total_hands * 100, 1) .. "%"
+        cc.printdebug("result.data.hands_won_rate222: %s", result.data.hands_won_rate)
     end
 
 
@@ -527,8 +530,8 @@ function DataAction:analyzestyleingameAction(args)
         return result
     end
     result.data.wtsd_won        = dbres[1].wtsd_won
-    if result.data.wtsd_won == 0 then
-        result.data.wtsd_won_rate = 0
+    if tonumber(result.data.wtsd_won) == 0 then
+        result.data.wtsd_won_rate = "0%"
     else
         result.data.wtsd_won_rate   = round(result.data.wtsd_won / result.data.wtsd * 100, 1).. "%"
     end
