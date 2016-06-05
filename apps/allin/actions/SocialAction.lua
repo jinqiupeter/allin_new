@@ -3,6 +3,7 @@ local gbc = cc.import("#gbc")
 local json      = cc.import("#json")
 local Constants  = cc.import(".Constants", "..")
 local SocialAction = cc.class("SocialAction", gbc.ActionBase)
+local Helper = cc.import(".Helper", "..")
 
 SocialAction.ACCEPTED_REQUEST_TYPE = "websocket"
 
@@ -14,48 +15,6 @@ function SocialAction:ctor(config)
     SocialAction.super.ctor(self, config)
 end
 
-local _buyAnimation = function (animation_name, args)
-    local instance = args.instance
-    local mysql = instance:getMysql()
-
-    local sql = "SELECT name, name_cn, price FROM animation WHERE "
-         .. " name = " .. instance:sqlQuote(animation_name)
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.printdebug("db err: %s", err)
-        return {bought = false, err = "db err: " .. err}
-    end
-    local price = 0
-    if #dbres ~= 0 then
-        price = tonumber(dbres[1].price)
-    end
-
-    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.printdebug("db err: %s", err)
-        return {bought = false, err = "db err: " .. err}
-    end
-    local gold_available = tonumber(dbres[1].gold)
-    -- update user.gold
-    local gold_to_charge = price
-    if gold_available < gold_to_charge then
-        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughAnimation, gold_available, gold_to_charge)
-        return {bought = false, err = "err: " .. err_mes}
-    end
-
-    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.printdebug("db err: %s", err)
-        return {bought = false, err = "db err: " .. err}
-    end
-    
-    return {bought = true, err = "animation bought successfully"}
-end
 
 function SocialAction:gametablechatAction(args)
     local data = args.data
@@ -98,7 +57,7 @@ function SocialAction:gametablechatAction(args)
     local redis = instance:getRedis()
     local mysql = instance:getMysql()
     if content_type == "animation" then
-        local bought, err = _buyAnimation(content, {instance = instance}) 
+        local bought, err = Helper:buyAnimation(instance, content)
         if not bought then
             result.data.msg = Constants.ErrorMsg.FailedToBuyAnimation .. ": " .. err
             result.data.state = Constants.Error.PermissionDenied

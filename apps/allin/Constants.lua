@@ -16,7 +16,8 @@ _M.Snap = {
         SnapOddChips        = 0x08,
         SnapPlayerAction    = 0x0a,
         SnapPlayerCurrent   = 0x0b,
-        SnapPlayerShow      = 0x0c
+        SnapPlayerShow      = 0x0c,
+        SnapRespite         = 0x11,
     },
 
     GameState = {
@@ -109,11 +110,16 @@ _M.IAP_SANDBOX_URL                  = "https://sandbox.itunes.apple.com/verifyRe
 _M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceipt"
 
 _M.ErrorMsg = {
-    FailedToBuy = "买入失败",
-    FailedToBuyAnimation = "购买表情失败",
-    GoldNotEnough = "您的剩余金币(%s) 不足以支付本次买入(%s), 请充值！",
-    GoldNotEnoughAnimation = "您的剩余金币(%s) 不足以购买本表情(%s金币), 请充值！",
-    WrongPassword = "密码错误，请确认密码是否正确",
+    FailedToBuy                     = "买入失败",
+    FailedToBuyAnimation            = "购买表情失败",
+    FailedToBuyTimeout              = "购买加时失败",
+    GoldNotEnough                   = "您的剩余金币(%s) 不足以支付本次买入(%s), 请充值！",
+    GoldNotEnoughAnimation          = "您的剩余金币(%s) 不足以购买本表情(%s金币), 请充值！",
+    GoldNotEnoughTime               = "您的剩余金币(%s) 不足以购买本次加时(%s金币), 请充值！",
+    WrongPassword                   = "密码错误，请确认密码是否正确",
+    GameNotStarted                  = "游戏尚未开始",
+    GameNotFound                    = "游戏不存在",
+    RespiteCountExceeded            = "一次下注最多能购买两次加时",
 }
 
 return table.readonly(_M)

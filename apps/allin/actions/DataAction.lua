@@ -1,11 +1,9 @@
 local string_split       = string.split
 local Constants = cc.import(".Constants", "..")
-local Game_Runtime = cc.import("#game_runtime")
 local gbc = cc.import("#gbc")
 local json = cc.import("#json")
 local DataAction = cc.class("DataAction", gbc.ActionBase)
 DataAction.ACCEPTED_REQUEST_TYPE = "websocket"
-
 -- public methods
 function DataAction:ctor(config)
     DataAction.super.ctor(self, config)
@@ -398,10 +396,15 @@ function DataAction:showgamedataAction(args)
     result.data.offset = offset
     result.data.game_id = game_id
     
-    local game_runtime = Game_Runtime:new(instance)
+    local game_runtime = instance:getGameRuntime()
     local started_at = game_runtime:getGameInfo(game_id, "StartedAt")
     local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
     local duration = game_runtime:getGameInfo(game_id, "Duration")
+    local game_state = game_runtime:getGameInfo(game_id, "GameState")
+    local testtt = game_runtime:getGameInfo(game_id, "TEst")
+    cc.printdebug("current game state in DataAction: %s", game_state)
+    cc.printdebug("testtt in DataAction: %s", testtt)
+
     result.data.started_at = started_at
     result.data.blind_amount = blind_amount
     result.data.duration = duration
