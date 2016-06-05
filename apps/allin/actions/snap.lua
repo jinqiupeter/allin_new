@@ -1,9 +1,8 @@
 local Snap       = cc.class("Snap")
 local Constants  = cc.import(".Constants", "..")
-local Game_Runtime = cc.import("#game_runtime")
 
 local string_split       = string.split
-local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR
+local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite
 
 
 -- to support playing more than one game, we need to put these info in a table
@@ -141,6 +140,7 @@ _handleGameState = function (snap_value, args)
 
     local instance = args.instance
     local mysql = args.mysql
+    local redis = args.redis
     local self = args.self
 
     local sql = ""
@@ -158,8 +158,9 @@ _handleGameState = function (snap_value, args)
              .. " AND user_id = " .. instance:getCid()
              
         -- set game state to Start. SnapGameStateStart is send in PlaceTable(), so only 
-        local game_runtime = Game_Runtime:new(instance)
-        game_runtime:setGameInfo(game_id, "GameState", game_state)
+        local game_runtime = instance:getGameRuntime()
+        local pre_game_state = game_runtime:getGameInfo(game_id, "GameState")
+        game_runtime:setGameInfo(game_id, "GameState", Constants.GameState.GameStateStarted)
         game_runtime:setGameInfo(game_id, "StartedAt", os.time())
 
 
@@ -168,12 +169,16 @@ _handleGameState = function (snap_value, args)
              .. " WHERE game_id = " .. game_id
              .. " AND user_id = " .. instance:getCid()
 
+        local game_runtime = instance:getGameRuntime()
+        game_runtime:setGameInfo(game_id, "GameState", Constants.GameState.GameStateEnded)
+        game_runtime:setGameInfo(game_id, "EndedAt", os.time())
+
         if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
             -- exchange user stake back to gold
             self:_exchangeStakeToGold({game_id = game_id, table_id = table_id, mysql = mysql})
 
             -- delete game info because it's not needed anymore
-            local game_runtime = Game_Runtime:new(instance)
+            local game_runtime = instance:getGameRuntime()
             game_runtime:deleteInfo(game_id)
         end
     end
@@ -212,6 +217,14 @@ _handleTable = function (snap_value, args)
     local bet_round    = tmp[2]
     value.bet_round = bet_round
     local key = "" .. game_id .. "_" .. table_id
+
+    -- clear user_runtime RespiteCount if a new betting round started
+    local user_runtime = instance:getUserRuntime()
+    local previous_betround = self:_getBetRound(game_id, table_id)
+    if previous_betround and previous_betround ~= value.bet_round then
+        user_runtime:setRespiteCount(game_id, 0)
+    end
+        
     self.bet_rounds = {[key] = value.bet_round}
     --[[ bet round:
     Not in bet round = -1
@@ -310,7 +323,7 @@ _handleTable = function (snap_value, args)
     value.blind_amount = head
     -- update game.blind_amount
     if tonumber(instance:getCid()) == tonumber(self:_getDealer(game_id, table_id)) then
-        local game_runtime = Game_Runtime:new(instance)
+        local game_runtime = instance:getGameRuntime()
         game_runtime:setGameInfo(game_id, "BlindAmount", value.blind_amount)
     end
 
@@ -608,6 +621,22 @@ _handlePlayerShow = function (snap_value, args)
     return value
 end
 
+_handleRespite = function (snap_value, args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local self = args.self
+    local instance = args.instance
+    local mysql = args.mysql
+
+    -- tcp: SNAP 1:0 5 10 12
+    local value = {}
+    value.player_id = snap_value[1]
+    value.time_bought = snap_value[2]
+    value.time_left   = snap_value[3]
+
+    return value
+end
+
 local _snapHandler = {
     [Constants.Snap.SnapType.SnapGameState]           = _handleGameState,
     [Constants.Snap.SnapType.SnapTable]               = _handleTable,
@@ -617,7 +646,8 @@ local _snapHandler = {
     [Constants.Snap.SnapType.SnapOddChips]            = _handleOddChips,
     [Constants.Snap.SnapType.SnapPlayerAction]        = _handlePlayerAction,
     [Constants.Snap.SnapType.SnapPlayerCurrent]       = _handlePlayerCurrent,
-    [Constants.Snap.SnapType.SnapPlayerShow]          = _handlePlayerShow
+    [Constants.Snap.SnapType.SnapPlayerShow]          = _handlePlayerShow,
+    [Constants.Snap.SnapType.SnapRespite]             = _handleRespite,
 }
 Snap.snapHandler = _snapHandler
 

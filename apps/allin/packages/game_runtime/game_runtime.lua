@@ -14,7 +14,7 @@ local _EVENT = table.readonly({
 
 function Game_Runtime:ctor(instance)
     self._instance  = instance
-    self._redis     = instance:getRedis()
+    self._redis     = self._instance:getRedis()
 end
 
 function Game_Runtime:setPlayers(game_id, players)
@@ -32,15 +32,11 @@ function Game_Runtime:setPlayers(game_id, players)
 end
 
 function Game_Runtime:addPlayer(game_id, user_id)
-    self._redis:initPipeline()
-    self._redis:sadd(_GAME_RUNTIME_SET .. game_id, user_id)
-    return self._redis:commitPipeline()
+    return self._redis:sadd(_GAME_RUNTIME_SET .. game_id, user_id)
 end
 
 function Game_Runtime:removePlayer(game_id, user_id)
-    self._redis:initPipeline()
-    self._redis:srem(_GAME_RUNTIME_SET .. game_id, user_id)
-    return self._redis:commitPipeline()
+    return self._redis:srem(_GAME_RUNTIME_SET .. game_id, user_id)
 end
 
 function Game_Runtime:getPlayers(game_id)
@@ -57,9 +53,7 @@ end
 
 function Game_Runtime:setGameInfo(game_id, field, value)
     local redis = self._redis
-    redis:initPipeline()
-    redis:hset(_GAME_RUNTIME_INFO .. game_id, field, value)
-    return redis:commitPipeline()
+    return redis:hset(_GAME_RUNTIME_INFO .. game_id, field, ""..value)
 end
 
 function Game_Runtime:getGameInfo(game_id, field)
@@ -79,9 +73,7 @@ end
 
 function Game_Runtime:deleteInfo(game_id)
     local redis = self._redis
-    redis:initPipeline()
-    redis:del(_GAME_RUNTIME_INFO .. game_id)
-    return redis:commitPipeline()
+    return redis:del(_GAME_RUNTIME_INFO .. game_id)
 end
 
 return Game_Runtime

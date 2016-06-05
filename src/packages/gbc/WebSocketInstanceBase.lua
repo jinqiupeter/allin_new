@@ -212,6 +212,8 @@ function WebSocketInstanceBase:runEventLoop()
         end -- rect next message
     end -- loop
 
+    self:dispatchEvent({name = _EVENT.DISCONNECTED, reason = reason})
+
     sub:stop()
     self._subloop = nil
 
@@ -220,7 +222,6 @@ function WebSocketInstanceBase:runEventLoop()
     self._socket = nil
 
     -- disconnected
-    self:dispatchEvent({name = _EVENT.DISCONNECTED, reason = reason})
     cc.printinfo("[websocket:%s] disconnected", connectId)
 end
 

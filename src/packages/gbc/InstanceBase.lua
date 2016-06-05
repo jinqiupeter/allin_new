@@ -121,26 +121,30 @@ function InstanceBase:runAction(actionName, args)
     return method(action, args)
 end
 
+function InstanceBase:createRedis()
+    local config = self.config.server.redis
+    local redis = Redis:new()
+
+    local ok, err
+    if config.socket then
+        ok, err = redis:connect(config.socket)
+    else
+        ok, err = redis:connect(config.host, config.port)
+    end
+    if not ok then
+        cc.throw("InstanceBase:getRedis() - %s", err)
+    end
+
+    redis:select(self.config.app.appIndex)
+    return redis
+end
+
 function InstanceBase:getRedis()
     local redis = self._redis
     if not redis then
-        local config = self.config.server.redis
-        redis = Redis:new()
-
-        local ok, err
-        if config.socket then
-            ok, err = redis:connect(config.socket)
-        else
-            ok, err = redis:connect(config.host, config.port)
-        end
-        if not ok then
-            cc.throw("InstanceBase:getRedis() - %s", err)
-        end
-
-        redis:select(self.config.app.appIndex)
-        self._redis = redis
+        self._redis = self:createRedis()
     end
-    return redis
+    return self._redis
 end
 
 function InstanceBase:createMysql()
