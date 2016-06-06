@@ -1425,7 +1425,7 @@ function GameAction:useractionAction(args)
 end
 
 function GameAction:processMessage(message, mysql, redis)
-    cc.printdebug("GameAction:processMessage processing message: %s", message)
+    cc.printdebug("player %s GameAction:processMessage processing message: %s", self:getInstance():getCid(), message)
     local parts = string_split(message, " ")
     local cmd = parts[1]
 

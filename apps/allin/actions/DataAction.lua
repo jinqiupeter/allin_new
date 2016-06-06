@@ -364,21 +364,26 @@ function DataAction:showgamedataAction(args)
 
     -- select gs.stake as stake_ended_at, ugh.game_id, ugh.user_id, u.nickname, sum(b.stake) as total_buying from user u, (select * from game_stake where updated_at in (select  MAX(updated_at) AS updated_at FROM game_stake where game_id = 1514 group by user_id)) gs, buying b, user_game_history ugh where ugh.game_id = b.game_id and ugh.user_id = b.user_id and b.game_id = 1514 and b.user_id = u.id and gs.game_id = b.game_id and gs.user_id = b.user_id group by ugh.user_id
     --
+    --[[
     local sub_query = " SELECT * FROM game_stake WHERE updated_at IN ( "
                        .. " SELECT  MAX(updated_at) AS updated_at FROM game_stake WHERE game_id = " .. game_id .. " GROUP BY user_id " 
                        .. " ) "
-    local sql = "SELECT ugh.game_id, ugh.user_id, u.nickname, gs.stake as stake_ended, "
+                       --]]
+    local sub_query = " SELECT * FROM buying WHERE bought_at IN ( "
+                       .. " SELECT  MAX(bought_at) AS bought_at FROM buying WHERE game_id = " .. game_id .. " GROUP BY user_id " 
+                       .. " ) "
+    local sql = "SELECT ugh.game_id, ugh.user_id, u.nickname, be.stake_available as stake_ended, "
                 .. " SUM(b.stake_bought) as total_buying, "
-                .. " gs.stake - SUM(b.stake_bought) AS result"
+                .. " be.stake_available - SUM(b.stake_bought) AS result"
                 .. " FROM user u , "
-                .. "(" .. sub_query .. ") as gs,"
+                .. "(" .. sub_query .. ") as be,"
                 .. " buying b, user_game_history ugh "
                 .. " WHERE ugh.game_id = " .. game_id
                 .. " AND ugh.user_id = b.user_id "
                 .. " AND ugh.game_id = b.game_id "
                 .. " AND ugh.user_id = u.id "
-                .. " AND gs.game_id = b.game_id"
-                .. " AND gs.user_id = b.user_id"
+                .. " AND be.game_id = b.game_id"
+                .. " AND be.user_id = b.user_id"
                 .. " GROUP BY ugh.user_id"
                 .. " LIMIT " .. offset .. ", " .. limit
 
