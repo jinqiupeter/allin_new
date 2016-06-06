@@ -420,7 +420,7 @@ function GameAction:creategameAction(args)
         end
 
         -- blind time
-        extra.blind_time = data.blind_time
+        extra.blinds_time = data.blind_time
         if not extra.blind_time then
             result.data.msg = "blind_time not provided"
             result.data.state = Constants.Error.ArgumentNotSet
@@ -485,7 +485,7 @@ function GameAction:creategameAction(args)
         end
 
         -- blind time
-        extra.blind_time = data.blind_time
+        extra.blinds_time = data.blind_time
         if not extra.blind_time then
             result.data.msg = "blind_time not provided"
             result.data.state = Constants.Error.ArgumentNotSet
@@ -710,8 +710,6 @@ function GameAction:creategameAction(args)
     game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
     game_runtime:setGameInfo(game_id, "GameMode", game_mode)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
-    local inspect = require("inspect")
-    cc.printdebug("keys of redis in GameAction.lua in creategame: %s", inspect(instance:getRedis():keys("*")))
 
     -- add the game to user's joined games list
     local user_runtime = instance:getUserRuntime()
