@@ -177,7 +177,7 @@ function WebSocketInstance:addCustomLoop()
     end
 
     allin:start(function(message, mysql)
-        cc.printdebug("dispatching response %s", message)
+        cc.printdebug("dispatching user %d with response %s", self:getCid(), message)
         self:dispatchEvent({
             name    = _EVENT.ALLIN_MESSAGE .. "_" .. self:getConnectId(),
             message = message,

@@ -60,7 +60,14 @@ _M.Snap = {
         SnapPlayerActionBet     = 0x04,
         SnapPlayerActionRaised  = 0x05,
         SnapPlayerActionAllin   = 0x06,
-    }
+    },
+
+    BetRound = {
+        Preflop     = 0,
+        Flop        = 1,
+        Turn        = 2,
+        River       = 3
+    },
 }
 
 _M.OK = 0
