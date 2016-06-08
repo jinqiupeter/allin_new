@@ -42,8 +42,9 @@ function User_Runtime:getJoinedGamesCount()
     return self._redis:scard(_USER_JOINED_GAMES .. self._instance:getCid())
 end
 
-function User_Runtime:setRespiteCount(game_id, count)
-    self._redis:hset(_USER_RESPITE_ .. self._instance:getCid(), ""..game_id, count)
+function User_Runtime:setRespiteCount(game_id, count, player)
+    local player_id = player or self._instance:getCid()
+    self._redis:hset(_USER_RESPITE_ .. player_id, ""..game_id, count)
 end
 
 function User_Runtime:getRespiteCount(game_id)

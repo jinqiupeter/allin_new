@@ -9,7 +9,7 @@ local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleWin
 function Snap:_getHand (instance, game_id, table_id)
     local game_runtime = instance:getGameRuntime()
     local table_hand = game_runtime:getGameInfo(game_id, "TableHand_" .. table_id)
-    local hand_no = 0
+    local hand_no = -1
     if table_hand ~= nil then
         local info = string_split(table_hand, ":")
         hand_no = info[2]
@@ -21,7 +21,7 @@ end
 function Snap:_getDealer(instance, game_id, table_id)
     local game_runtime = instance:getGameRuntime()
     local table_dealer = game_runtime:getGameInfo(game_id, "TableDealer_" .. table_id)
-    local dealer = 0
+    local dealer = -1
     if table_dealer ~= nil then
         local info = string_split(table_dealer, ":")
         dealer = info[2]
@@ -33,7 +33,7 @@ end
 function Snap:_getBetRound(instance, game_id, table_id)
     local game_runtime = instance:getGameRuntime()
     local table_betround = game_runtime:getGameInfo(game_id, "TableBetround_" .. table_id)
-    local betround = 0
+    local betround = -1
     if table_betround ~= nil then
         local info = string_split(table_betround, ":")
         betround = info[2]
@@ -234,23 +234,15 @@ _handleTable = function (snap_value, args)
     local user_runtime = instance:getUserRuntime()
     local game_runtime = instance:getGameRuntime()
     local previous_betround = self:_getBetRound(instance, game_id, table_id)
-    if previous_betround then
-        if previous_betround ~= value.bet_round then
-            user_runtime:setRespiteCount(game_id, 0)
-            game_runtime:setGameInfo(game_id, "TableBetround_" .. table_id, "" .. table_id .. ":" .. value.bet_round)
+    if tonumber(previous_betround) ~= tonumber(value.bet_round) then
+        -- whoever receives the new betround snap is responsible for clearing respite count for all players in the game
+        local players = game_runtime:getPlayers(game_id)
+        for key, player in pairs(players) do
+            user_runtime:setRespiteCount(game_id, 0, player)
         end
-    else
         game_runtime:setGameInfo(game_id, "TableBetround_" .. table_id, "" .. table_id .. ":" .. value.bet_round)
     end
         
-    --[[ bet round:
-    Not in bet round = -1
-    Preflop     = 0,
-    Flop        = 1,
-    Turn        = 2,
-    River       = 3
-    --]]
-
     -- turn
     local head = table.remove(snap_value, 1)
     local turn = head
