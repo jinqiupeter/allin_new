@@ -79,7 +79,7 @@ function Snap:_updateGameStake(occupied_seats, args)
         end
         local last_id = dbres[1].id
         local sql = " UPDATE buying SET stake_available = " .. stake
-                    " , updated_at = now() "
+                    .. " , updated_at = now() "
                     .. " WHERE id =  " .. last_id 
         cc.printdebug("executing sql: %s", sql)
         local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -238,6 +238,8 @@ _handleTable = function (snap_value, args)
     if tonumber(previous_betround) ~= tonumber(value.bet_round) then
         -- whoever receives the new betround snap is responsible for clearing respite count for all players in the game
         local players = game_runtime:getPlayers(game_id)
+        local inspect = require("inspect")
+        cc.printdebug("players for game %s: %s", game_id, inspect(players))
         for key, player in pairs(players) do
             user_runtime:setRespiteCount(game_id, 0, player)
         end

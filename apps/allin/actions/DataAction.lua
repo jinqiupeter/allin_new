@@ -44,19 +44,19 @@ function DataAction:gamesplayedAction(args)
     starting_date = os.date('%Y-%m-%d %H:%M:%S', starting_date)
     ending_date = os.date('%Y-%m-%d %H:%M:%S', ending_date)
 
-    --[[
-    local sub_query = "SELECT MAX(updated_at) AS updated_at FROM game_stake " 
-                      .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
-                      .. " AND user_id = " .. instance:getCid() 
-                      .. " GROUP BY game_id"
-                      --]]
-    local sub_query = " SELECT game_id, user_id, bought_at, updated_at FROM buying  "
+    local sub_query = " SELECT game_id, user_id, bought_at, MAX(updated_at) as updated_at, sum(stake_bought) as stake_bought FROM buying"
                        .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
                        .. " AND user_id = " .. user_id 
                        .. " GROUP BY game_id " 
-    local sql = "SELECT b.game_id, b.stake_available as stake_ended, b.updated_at as ended_at, d.name, SUM(b.stake_bought), (b.stake_available - SUM(b.stake_bought)) as result FROM "
-    .. "(" .. sub_query .. ") b,"
-    .. "game d, " 
+    local sql = "SELECT b.game_id, b.stake_available as stake_ended, b.updated_at as ended_at, d.name, a.stake_bought, (b.stake_available - a.stake_bought) as result FROM "
+    .. "(" .. sub_query .. ") a,"
+    .. " buying b, "
+    .. "game d " 
+    .. " WHERE d.id = b.game_id "
+    .. " AND a.game_id = b.game_id "
+    .. " AND a.user_id = b.user_id "
+    .. " AND a.updated_at = b.updated_at"
+    .. " GROUP BY b.game_id "
     .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
@@ -244,15 +244,16 @@ function DataAction:listallclubgamesAction(args)
     local mysql = instance:getMysql()
     starting_date = os.date('%Y-%m-%d %H:%M:%S', starting_date)
     ending_date = os.date('%Y-%m-%d %H:%M:%S', ending_date)
-
-    local sql = "SELECT c.id AS club_id, c.name AS club_name , c.area, COUNT(ugh.game_id = g.id and g.club_id = uc.club_id) as total_games "
-    .. " FROM club c, user_club uc, user_game_history ugh, game g"
+    local sub_query = " SELECT game_id, user_id, bought_at, MAX(updated_at) as updated_at FROM buying"
+                       .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
+                       .. " GROUP BY game_id "
+    local sql = "SELECT c.id AS club_id, c.name AS club_name , c.area, COUNT(b.game_id = g.id and g.club_id = uc.club_id) as total_games "
+    .. " FROM club c, user_club uc, (" .. sub_query .. ") b, game g"
     .. " WHERE uc.user_id = " .. instance:getCid()
     .. " AND uc.club_id = c.id "
-    .. " AND ugh.user_id = uc.user_id "
-    .. " AND ugh.game_id = g.id "
+    .. " AND b.user_id = uc.user_id "
+    .. " AND b.game_id = g.id "
     .. " AND uc.club_id = g.club_id "
-    .. " AND ugh.ended_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
     .. " GROUP BY g.club_id "
     .. " ORDER BY total_games DESC "
     .. " LIMIT " .. offset .. ", " .. limit
@@ -308,20 +309,17 @@ function DataAction:listgamesinclubAction(args)
     starting_date = os.date('%Y-%m-%d %H:%M:%S', starting_date)
     ending_date = os.date('%Y-%m-%d %H:%M:%S', ending_date)
 
-    -- 'select ugh.game_id , g.name as game_name, g.game_mode, ugh.ended_at, ugh.ended_at - ugh.started_at as duration, count(ugh.user_id) as players  from game g, user_game_history ugh  where g.club_id = 329  and g.id = ugh.game_id and ugh.game_id in (select game_id from user_game_history where user_id = 5) group by ugh.game_id'
-    --
-    local sub_query = " SELECT game_id from user_game_history where user_id = " .. instance:getCid()
-    local sql = "SELECT ugh.game_id , g.name AS game_name, g.game_mode, ugh.ended_at, "
-                .. " ugh.ended_at - ugh.started_at AS duration, "
-                .. " COUNT(distinct ugh.user_id) AS players, "
-                .. " SUM(b.stake_bought) / COUNT(distinct b.user_id) AS total_buying "
-                .. " FROM game g, user_game_history ugh, buying b"
+    local sub_query = "SELECT COUNT(DISTINCT user_id) AS players, MAX(updated_at) - MIN(bought_at) AS duration, "
+                       .. " game_id, MIN(bought_at) AS started_at, MAX(updated_at) AS ended_at,  SUM(stake_bought) AS total_buying FROM buying"
+                       .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
+                       .. " GROUP BY game_id "
+    local sql = "SELECT b.game_id , g.name AS game_name, g.game_mode, b.ended_at, "
+                .. " b.duration / 60 as duration,  b.players, "
+                .. " b.total_buying "
+                .. " FROM game g,  (" .. sub_query .. ") b"
                 .. " WHERE g.club_id = " .. club_id
-                .. " AND g.id = ugh.game_id "
-                .. " AND ugh.game_id in (" .. sub_query .. ")"
-                .. " AND ugh.ended_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
-                .. " AND ugh.game_id = b.game_id "
-                .. " GROUP BY ugh.game_id"
+                .. " AND g.id = b.game_id "
+                .. " GROUP BY b.game_id"
                 .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
@@ -360,27 +358,21 @@ function DataAction:showgamedataAction(args)
     local mysql = instance:getMysql()
 
     --
-    --[[
-    local sub_query = " SELECT * FROM game_stake WHERE updated_at IN ( "
-                       .. " SELECT  MAX(updated_at) AS updated_at FROM game_stake WHERE game_id = " .. game_id .. " GROUP BY user_id " 
-                       .. " ) "
-                       --]]
-    local sub_query = " SELECT * FROM buying WHERE bought_at IN ( "
-                       .. " SELECT  MAX(bought_at) AS bought_at FROM buying WHERE game_id = " .. game_id .. " GROUP BY user_id " 
-                       .. " ) "
-    local sql = "SELECT ugh.game_id, ugh.user_id, u.nickname, be.stake_available as stake_ended, "
-                .. " SUM(b.stake_bought) as total_buying, "
-                .. " be.stake_available - SUM(b.stake_bought) AS result"
+    local sub_query = " SELECT game_id, user_id, bought_at, MAX(updated_at) as updated_at, sum(stake_bought) as stake_bought FROM buying"
+                       .. " WHERE game_id = " .. game_id
+                       .. " GROUP BY user_id"
+    local sql = "SELECT a.game_id, a.user_id, u.nickname, b.stake_available as stake_ended, "
+                .. " a.stake_bought as total_buying, "
+                .. " (b.stake_available - a.stake_bought) AS result"
                 .. " FROM user u , "
-                .. "(" .. sub_query .. ") as be,"
-                .. " buying b, user_game_history ugh "
-                .. " WHERE ugh.game_id = " .. game_id
-                .. " AND ugh.user_id = b.user_id "
-                .. " AND ugh.game_id = b.game_id "
-                .. " AND ugh.user_id = u.id "
-                .. " AND be.game_id = b.game_id"
-                .. " AND be.user_id = b.user_id"
-                .. " GROUP BY ugh.user_id"
+                .. "(" .. sub_query .. ")  a,"
+                .. " buying b "
+                .. " WHERE "
+                .. " a.user_id = b.user_id "
+                .. " AND a.game_id = b.game_id "
+                .. " AND a.updated_at = b.updated_at"
+                .. " AND a.user_id = u.id "
+                .. " GROUP BY a.user_id"
                 .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
@@ -402,15 +394,26 @@ function DataAction:showgamedataAction(args)
     local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
     local duration = game_runtime:getGameInfo(game_id, "Duration")
     local game_state = game_runtime:getGameInfo(game_id, "GameState")
-    local testtt = game_runtime:getGameInfo(game_id, "TEst")
-    cc.printdebug("current game state in DataAction: %s", game_state)
-    cc.printdebug("testtt in DataAction: %s", testtt)
 
     result.data.started_at = started_at
     result.data.blind_amount = blind_amount
     result.data.duration = duration
-    result.data.time_elapsed = os.time() - started_at
+    if game_state == Constants.GameState.GameStateEnded then
+        local started_str = os.date('%Y-%m-%d %H:%M:%S', started_at)
+        local sql = " SELECT MAX(updated_at) - FROM_UNIXTIME(" .. started_str .. ") as time_elapsed FROM buying"
+                       .. " WHERE game_id = " .. game_id
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            result.data.state = Constants.Error.MysqlError
+            result.data.msg = "数据库错误: " .. err
+            return result
+        end
 
+        result.data.time_elapsed = dbres[1].time_elapsed
+    else
+        result.data.time_elapsed = os.time() - started_at
+    end
 
     return result
 end

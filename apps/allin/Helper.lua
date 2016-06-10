@@ -1,4 +1,7 @@
 local Helper = cc.class("Helper")
+local Constants = cc.import(".Constants")
+local string_split       = string.split
+local string_format = string.format
 
 function Helper:getSystemConfig(instance, config_name)
     local mysql = instance:getMysql()
