@@ -168,9 +168,9 @@ _handleGAMEINFO = function (parts, args)
     if bit.band(0x01 ,tonumber(info[4])) > 0 then 
         result.data.is_player = 1
     end
-    result.data.password_protected = 0
+    result.data.password_protected = "0"
     if bit.band(0x02 ,tonumber(info[4])) > 0 then 
-        result.data.password_protected = 1
+        result.data.password_protected = "1"
     end
     result.data.auto_restart = 0
     if bit.band(0x04 ,tonumber(info[4])) > 0 then 
@@ -486,7 +486,7 @@ function GameAction:creategameAction(args)
 
         -- blind time
         extra.blinds_time = data.blind_time
-        if not extra.blind_time then
+        if not extra.blinds_time then
             result.data.msg = "blind_time not provided"
             result.data.state = Constants.Error.ArgumentNotSet
             return result

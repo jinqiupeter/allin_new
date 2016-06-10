@@ -251,6 +251,62 @@ function ClubAction:listclubAction(args)
     return result
 end
 
+function ClubAction:listmembersAction(args)
+    local data = args.data
+    local club_id = data.club_id
+    local limit = data.limit or Constants.Limit.ListClubLimit
+    local offset = data.offset or 0
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if limit > Constants.Limit.ListClubLimit then
+        result.data.msg = "max number of record limit exceeded, only " .. Constants.Limit.ListClubLimit .. " allowed in one query"
+        result.data.state = Constants.Error.PermissionDenied
+        return result
+    end
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"club_id\"")
+        return result
+    end
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local sql = "SELECT SQL_CALC_FOUND_ROWS u.id as user_id, u.nickname, u.last_login " 
+                .. " FROM user u, user_club uc WHERE uc.deleted = 0"
+                .. " AND uc.user_id = u.id "
+                .. " AND uc.club_id = " .. club_id
+                .. " LIMIT " .. offset .. ", " .. limit
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+
+    result.data.users = dbres
+    result.data.offset = offset
+    result.data.state = 0
+
+    sql = "SELECT FOUND_ROWS() as found_rows"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    result.data.users_found = dbres[1].found_rows
+    result.data.msg = result.data.users_found .. " user(s) found"
+
+    return result
+end
+
 function ClubAction:joinclubAction(args)
     local data = args.data
     local club_id = data.club_id
