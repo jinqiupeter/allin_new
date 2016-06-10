@@ -79,6 +79,7 @@ function Snap:_updateGameStake(occupied_seats, args)
         end
         local last_id = dbres[1].id
         local sql = " UPDATE buying SET stake_available = " .. stake
+                    " , updated_at = now() "
                     .. " WHERE id =  " .. last_id 
         cc.printdebug("executing sql: %s", sql)
         local dbres, err, errno, sqlstate = mysql:query(sql)
