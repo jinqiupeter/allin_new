@@ -9,6 +9,7 @@ GameAction.ACCEPTED_REQUEST_TYPE = "websocket"
 
 -- private
 local snap = cc.import(".snap")
+local WinnerPool = cc.import(".WinnerPool")
 
 local _updateUserGameHistory = function (mysql, args)
     local user_id = args.user_id
@@ -187,6 +188,11 @@ _handleGAMEINFO = function (parts, args)
 
     result.data.max_players         = info[5]
     result.data.player_count        = info[6]
+    local pooling, err = WinnerPool:getPoolingPlan(result.data.game_mode, result.data.player_count)
+    if not err then
+        result.data.pooling_plan = pooling
+    end
+
     result.data.timeout             = info[7]
 
     result.data.stake               = info[8]
@@ -378,6 +384,37 @@ function GameAction:versioncheckAction(args)
     return 
 end
 
+function GameAction:listpoolingplanAction(args)
+    local data = args.data
+    local game_mode = data.game_mode
+    local player_count = data.player_count
+    local msgid = args.__id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+    if not game_mode then
+        result.data.msg = "game_mode not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not player_count then
+        result.data.msg = "player_count not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+
+    local pooling, err = WinnerPool:getPoolingPlan(game_mode, player_count)
+    if not err then
+        result.data.pooling_plan = pooling
+        result.data.state = 0
+    else
+        result.data.state = Constants.Error.LogicError
+        result.data.msg = "failed to get pooling plan: " .. err
+    end
+
+    return result
+end
+
 function GameAction:creategameAction(args)
     local data = args.data
     local msgid = args.__id
@@ -421,7 +458,7 @@ function GameAction:creategameAction(args)
 
         -- blind time
         extra.blinds_time = data.blind_time
-        if not extra.blind_time then
+        if not extra.blinds_time then
             result.data.msg = "blind_time not provided"
             result.data.state = Constants.Error.ArgumentNotSet
             return result
@@ -486,7 +523,7 @@ function GameAction:creategameAction(args)
 
         -- blind time
         extra.blinds_time = data.blind_time
-        if not extra.blind_time then
+        if not extra.blinds_time then
             result.data.msg = "blind_time not provided"
             result.data.state = Constants.Error.ArgumentNotSet
             return result

@@ -20,6 +20,9 @@ function DataAction:gamesplayedAction(args)
     local ending_date = data.ending_date
     local limit = data.limit or Constants.Limit.ListDataLimit
     local offset = data.offset or 0
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local user_id = data.user_id or instance:getCid()
 
     local result = {state_type = "action_state", data = {
         action = args.action}
@@ -38,28 +41,22 @@ function DataAction:gamesplayedAction(args)
         return result
     end
 
-    local instance = self:getInstance()
-    local mysql = instance:getMysql()
     starting_date = os.date('%Y-%m-%d %H:%M:%S', starting_date)
     ending_date = os.date('%Y-%m-%d %H:%M:%S', ending_date)
 
+    --[[
     local sub_query = "SELECT MAX(updated_at) AS updated_at FROM game_stake " 
                       .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
                       .. " AND user_id = " .. instance:getCid() 
                       .. " GROUP BY game_id"
-    local sql = "SELECT a.game_id, a.stake as stake_ended, c.ended_at, d.name, e.stake_bought, (a.stake - e.stake_bought) as result FROM "
-    .. "game_stake a, "
+                      --]]
+    local sub_query = " SELECT game_id, user_id, bought_at, updated_at FROM buying  "
+                       .. " WHERE updated_at BETWEEN " .. instance:sqlQuote(starting_date) .. " AND " .. instance:sqlQuote(ending_date)
+                       .. " AND user_id = " .. user_id 
+                       .. " GROUP BY game_id " 
+    local sql = "SELECT b.game_id, b.stake_available as stake_ended, b.updated_at as ended_at, d.name, SUM(b.stake_bought), (b.stake_available - SUM(b.stake_bought)) as result FROM "
     .. "(" .. sub_query .. ") b,"
-    .. "user_game_history c, " 
     .. "game d, " 
-    .. "buying e"
-    .. " WHERE a.updated_at = b.updated_at "
-    .. " AND a.game_id = c.game_id "
-    .. " AND a.user_id = " .. instance:getCid()
-    .. " AND c.user_id = " .. instance:getCid()
-    .. " AND a.game_id = d.id"
-    .. " AND a.game_id = e.game_id"
-    .. " AND e.user_id = " .. instance:getCid()
     .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
@@ -362,7 +359,6 @@ function DataAction:showgamedataAction(args)
     local instance = self:getInstance()
     local mysql = instance:getMysql()
 
-    -- select gs.stake as stake_ended_at, ugh.game_id, ugh.user_id, u.nickname, sum(b.stake) as total_buying from user u, (select * from game_stake where updated_at in (select  MAX(updated_at) AS updated_at FROM game_stake where game_id = 1514 group by user_id)) gs, buying b, user_game_history ugh where ugh.game_id = b.game_id and ugh.user_id = b.user_id and b.game_id = 1514 and b.user_id = u.id and gs.game_id = b.game_id and gs.user_id = b.user_id group by ugh.user_id
     --
     --[[
     local sub_query = " SELECT * FROM game_stake WHERE updated_at IN ( "
