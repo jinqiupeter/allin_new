@@ -89,6 +89,72 @@ function Snap:_updateGameStake(occupied_seats, args)
     end
 end
 
+function Snap:_exchangeSitNGo(args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local mysql = args.mysql
+
+    local sql  = " SELECT user_id, stake_available as stake_ended FROM buying WHERE updated_at IN ( "
+               .. " SELECT  MAX(updated_at) AS updated_at FROM buying WHERE game_id = " .. game_id .. " GROUP BY user_id " 
+               .. " ) "
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
+        return
+    end
+
+    local index = 1
+    while index <= #dbres do
+        local user_found = dbres[index].user_id
+        local stake_ended = dbres[index].stake_ended
+
+        -- update user.gold
+        local sql = "UPDATE user SET gold = gold + " .. stake_ended / buying_rate .. " WHERE id = " .. user_found
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+            return 
+        end
+
+        index = index + 1
+    end
+end
+
+function Snap:_exchangeSNGMTT(args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local mysql = args.mysql
+
+    local sql  = " SELECT user_id, stake_available as stake_ended FROM buying WHERE updated_at IN ( "
+               .. " SELECT  MAX(updated_at) AS updated_at FROM buying WHERE game_id = " .. game_id .. " GROUP BY user_id " 
+               .. " ) "
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.throw("db err: %s", err)
+        return
+    end
+
+    local index = 1
+    while index <= #dbres do
+        local user_found = dbres[index].user_id
+        local stake_ended = dbres[index].stake_ended
+
+        -- update user.gold
+        local sql = "UPDATE user SET gold = gold + " .. stake_ended / buying_rate .. " WHERE id = " .. user_found
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+            return 
+        end
+
+        index = index + 1
+    end
+end
+
 function Snap:_exchangeStakeToGold(args)
     local game_id = args.game_id
     local table_id = args.table_id
@@ -106,37 +172,10 @@ function Snap:_exchangeStakeToGold(args)
     local buying_stake = dbres[1].buying_stake
     local buying_rate = buying_stake / buying_gold
     if game_mode ~= Constants.GameMode.GameModeRingGame then
-        cc.printdebug("only Sit&Go games should change stake to gold in the end")
-        return
+        self:_exchangeSitNGo({game_id = game_id, mysql = mysql, buying_rate = buying_rate})   
+    else
+        self:_exchangeSNGMTT({game_id = game_id, mysql = mysql, buying_rate = buying_rate})   
     end
-
-    local sql  = " SELECT user_id, stake as stake_ended FROM game_stake WHERE updated_at IN ( "
-               .. " SELECT  MAX(updated_at) AS updated_at FROM game_stake WHERE game_id = " .. game_id .. " GROUP BY user_id " 
-               .. " ) "
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.throw("db err: %s", err)
-        return
-    end
-
-    local index = 1
-    while index <= #dbres do
-        local user_found = dbres[index].user_id
-        local stake_ended = dbres[index].stake_ended
-
-        -- update user.gold
-        local sql = "UPDATE user SET gold = gold + " .. buying_stake / buying_rate
-        cc.printdebug("executing sql: %s", sql)
-        local dbres, err, errno, sqlstate = mysql:query(sql)
-        if not dbres then
-            cc.throw("db err: %s", err)
-            return 
-        end
-
-        index = index + 1
-    end
-
 end
 
 _handleGameState = function (snap_value, args)

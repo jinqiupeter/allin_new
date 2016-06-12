@@ -141,6 +141,7 @@ _handleGAMEINFO = function (parts, args)
     local msgid = args.msgid
     local redis = args.redis
     local instance = args.instance
+    local mysql = args.mysql
 
     if tonumber(parts[1]) ~= nil then
         msgid = parts[1]
@@ -188,9 +189,18 @@ _handleGAMEINFO = function (parts, args)
 
     result.data.max_players         = info[5]
     result.data.player_count        = info[6]
-    local pooling, err = WinnerPool:getPoolingPlan(result.data.game_mode, result.data.player_count)
-    if not err then
-        result.data.pooling_plan = pooling
+
+    -- get pot pooling plan for SNG and MTT
+    if tonumber(result.data.game_mode) == Constants.GameMode.GameModeSNG or tonumber(result.data.game_mode) == Constants.GameMode.GameModeFreezeOut then
+        local player_count = result.data.max_players
+        if result.data.game_mode == Constants.GameMode.GameModeFreezeOut then
+            player_count = result.data.player_count
+        end
+        
+        local pooling, err = WinnerPool:getPoolingPlan(result.data.game_mode, player_count)
+        if not err then
+            result.data.pooling_plan = pooling.range
+        end
     end
 
     result.data.timeout             = info[7]
@@ -208,6 +218,30 @@ _handleGAMEINFO = function (parts, args)
     result.data.blinds_time         = info[3]
 
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
+
+    -- get extra game info
+    local sql = "SELECT buying_gold, buying_stake, UNIX_TIMESTAMP(created_at) AS created_at FROM game where id = " .. result.data.game_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    local inspect = require("inspect")
+    cc.printdebug("got dbres: %s", inspect(dbres))
+    result.data.buying_gold = dbres[1].buying_gold
+    result.data.buying_stake = dbres[1].buying_stake
+    if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
+        local game_runtime = instance:getGameRuntime()
+        local started_at = game_runtime:getGameInfo(game_id, "StartedAt")
+        result.data.started_at = started_at
+    elseif tonumber(result.data.game_state) == Constants.GameState.GameStateWaiting then
+        result.data.started_at = dbres[1].created_at
+    end
+    result.data.ending_at = ""
 
     return result
 end
@@ -386,12 +420,15 @@ end
 
 function GameAction:listpoolingplanAction(args)
     local data = args.data
-    local game_mode = data.game_mode
+    local game_id = data.game_id
     local player_count = data.player_count
     local msgid = args.__id
     local result = {state_type = "action_state", data = {
         action = args.action}
     }
+    
+    -- TODO: query game_mode and player count from redis, then call WinnerPool:getPoolingPlan(result.data.game_mode, player_count)
+    --[[
     if not game_mode then
         result.data.msg = "game_mode not provided"
         result.data.state = Constants.Error.ArgumentNotSet
@@ -411,6 +448,19 @@ function GameAction:listpoolingplanAction(args)
         result.data.state = Constants.Error.LogicError
         result.data.msg = "failed to get pooling plan: " .. err
     end
+
+    if tonumber(game_mode) == Constants.GameMode.GameModeSNG or tonumber(game_mode) == Constants.GameMode.GameModeFreezeOut then
+        local player_count = result.data.max_players
+        if result.data.game_mode == Constants.GameMode.GameModeFreezeOut then
+            player_count = result.data.player_count
+        end
+        
+        local pooling, err = WinnerPool:getPoolingPlan(result.data.game_mode, player_count)
+        if not err then
+            result.data.pooling_plan = pooling.range
+        end
+    end
+    --]]
 
     return result
 end
@@ -646,29 +696,6 @@ function GameAction:creategameAction(args)
         return result
     end
 
-    --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
-    local message = msgid .. " CREATE game_id:"         .. game_id
-                                .. " type:"             .. game_mode 
-                                .. " players:"          .. max_players 
-                                .. " stake:"            .. buying_stake 
-                                .. " timeout:"          .. timeout
-                                .. " blinds_start:"     .. blinds_start
-                                .. " blinds_factor:"    .. (extra.blinds_factor or 12)
-                                .. " blinds_time:"      .. (extra.blinds_time or 30)
-                                .. " password:"         .. ""  -- password will be checked by gbc in game.joingame
-                                .. " expire_in:"        .. (extra.duration or 0)
-                                .. " \"name:"           .. name .. "\""
-                                .. "\n" -- '\n' is mandatory
-    cc.printdebug("sending message to allin server: %s", message)
-    local allin = instance:getAllin()
-
-    local bytes, err = allin:sendMessage(message)
-    if not bytes then
-        result.data.state = Constants.Error.AllinError
-        result.data.msg = err
-        cc.printwarn("failed to send message: %s", err)
-        return result
-    end 
 
     -- create record in table game
     local sql = "INSERT INTO game (max_players, timeout, blinds_start, password, name,  owner_id, club_id, game_mode, buying_gold, buying_stake) "
@@ -763,6 +790,31 @@ function GameAction:creategameAction(args)
     if not dbres then
         cc.throw("db err: %s", err)
     end
+
+    -- now send message to holdingnuts
+    --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
+    local message = msgid .. " CREATE game_id:"         .. game_id
+                                .. " type:"             .. game_mode 
+                                .. " players:"          .. max_players 
+                                .. " stake:"            .. buying_stake 
+                                .. " timeout:"          .. timeout
+                                .. " blinds_start:"     .. blinds_start
+                                .. " blinds_factor:"    .. (extra.blinds_factor or 12)
+                                .. " blinds_time:"      .. (extra.blinds_time or 30)
+                                .. " password:"         .. ""  -- password will be checked by gbc in game.joingame
+                                .. " expire_in:"        .. (extra.duration or 0)
+                                .. " \"name:"           .. name .. "\""
+                                .. "\n" -- '\n' is mandatory
+    cc.printdebug("sending message to allin server: %s", message)
+    local allin = instance:getAllin()
+
+    local bytes, err = allin:sendMessage(message)
+    if not bytes then
+        result.data.state = Constants.Error.AllinError
+        result.data.msg = err
+        cc.printwarn("failed to send message: %s", err)
+        return result
+    end 
 
     return 
 end
@@ -1456,6 +1508,8 @@ function GameAction:useractionAction(args)
     result.data.user_action = user_action
     result.data.state = 0
     result.data.msg = "user action sent"
+    result.data.game_id = game_id
+    result.data.user_id = instance:getCid()
     return result
 end
 
