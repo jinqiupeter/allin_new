@@ -236,7 +236,7 @@ _handleGAMEINFO = function (parts, args)
     result.data.buying_stake = dbres[1].buying_stake
     if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
         local game_runtime = instance:getGameRuntime()
-        local started_at = game_runtime:getGameInfo(game_id, "StartedAt")
+        local started_at = game_runtime:getGameInfo(result.data.game_id, "StartedAt")
         result.data.started_at = started_at
     elseif tonumber(result.data.game_state) == Constants.GameState.GameStateWaiting then
         result.data.started_at = dbres[1].created_at
