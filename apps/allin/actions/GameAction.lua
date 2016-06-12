@@ -230,8 +230,6 @@ _handleGAMEINFO = function (parts, args)
         return result
     end
 
-    local inspect = require("inspect")
-    cc.printdebug("got dbres: %s", inspect(dbres))
     result.data.buying_gold = dbres[1].buying_gold
     result.data.buying_stake = dbres[1].buying_stake
     if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
