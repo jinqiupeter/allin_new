@@ -127,6 +127,9 @@ _M.ErrorMsg = {
     GameNotStarted                  = "游戏尚未开始",
     GameNotFound                    = "游戏不存在",
     RespiteCountExceeded            = "一次下注最多能购买两次加时",
+    RebuyNotAllowed                 = "本游戏不允许Rebuy",
+    RebuyLimitExceeded              = "您已Rebuy达到%s次，不能再Rebuy了",
+    RebuyNotAllowedInCurrentLevel   = "当前级别(%s)不再允许Rebuy",
 }
 
 return table.readonly(_M)

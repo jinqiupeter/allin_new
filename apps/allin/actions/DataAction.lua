@@ -398,7 +398,7 @@ function DataAction:showgamedataAction(args)
     result.data.started_at = started_at
     result.data.blind_amount = blind_amount
     result.data.duration = duration
-    if game_state == Constants.GameState.GameStateEnded then
+    if tonumber(game_state) == Constants.GameState.GameStateEnded then
         local started_str = os.date('%Y-%m-%d %H:%M:%S', started_at)
         local sql = " SELECT MAX(updated_at) - FROM_UNIXTIME(" .. started_str .. ") as time_elapsed FROM buying"
                        .. " WHERE game_id = " .. game_id

@@ -979,20 +979,13 @@ function GameAction:rebuyAction(args)
         cc.printinfo("argument not provided: \"game_id\"")
         return result
     end
-
-    if not amount then
-        result.data.msg = "amount not provided"
-        result.data.state = Constants.Error.ArgumentNotSet
-        cc.printinfo("argument not provided: \"amount\"")
-        return result
-    end
-
-    self._currentAction = args.action
-    self._msgid = msgid
-
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT * FROM game WHERE id = " .. game_id 
+    local sql = "SELECT g.game_mode, g.blinds_start, g.buying_gold, g.buying_stake, ge.allow_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times "
+             .. " FROM game g, game_extra ge WHERE "
+             .. " g.id = " .. game_id 
+             .. " AND g.id = ge.game_id "
+
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -1007,12 +1000,48 @@ function GameAction:rebuyAction(args)
     end
     local game = dbres[1]
 
+    local user_runtime = instance:getUserRuntime()
+    local game_runtime = instance:getGameRuntime()
+    local rebuy_count = tonumber(user_runtime:getRebuyCount(game_id)) or 0
+    local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount"))
+    local level = blind_amount  / tonumber(game.blinds_start)
+    if tonumber(game.game_mode) == Constants.GameMode.GameModeRingGame then
+        if not amount then
+            result.data.msg = "amount not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            cc.printinfo("argument not provided: \"amount\"")
+            return result
+        end
+    elseif tonumber(game.game_mode) == Constants.GameMode.GameModeSNG or tonumber(game.game_mode) == Constants.GameMode.GameModeFreezeOut then
+        if tonumber(game.allow_rebuy) ~= 1 then
+            result.data.msg = Constants.ErrorMsg.RebuyNotAllowed
+            result.data.state = Constants.Error.PermissionDenied
+            return result
+        elseif rebuy_count >= game.allow_rebuy_times then
+            result.data.msg = string_format(Constants.ErrorMsg.RebuyLimitExceeded, rebuy_count)
+            result.data.state = Constants.Error.PermissionDenied
+            return result
+        elseif level >= game.allow_rebuy_before_level then
+            result.data.msg = Constants.ErrorMsg.RebuyNotAllowedInCurrentLevel
+            result.data.state = Constants.Error.PermissionDenied
+            return result
+        end
+    end
+
+    self._currentAction = args.action
+    self._msgid = msgid
+
+
     -- buy required stake no matter if user has stake left
-    local required_stake  = amount
+    local required_stake  = game.buying_stake
+    if tonumber(game.game_mode) == Constants.GameMode.GameModeRingGame then
+        required_stake = amount
+    end
+
     local res = Helper:buyStake(instance, required_stake, {
                                                 game_id = game_id,
                                                 ignore_stake_left = true,
-                                                blinds_start = game.blinds_start,
+                                                blinds_start = blind_amount,
                                                 gold_needed = amount
                                                 })
     if res.status ~= 0 then
@@ -1034,6 +1063,9 @@ function GameAction:rebuyAction(args)
         cc.printwarn("failed to send message: %s", err)
         return result
     end 
+
+    -- increase rebuy account
+    user_runtime:setRebuyCount(game_id, rebuy_count + 1)
 
     result.data.state = 0
     result.data.stake_bought = rebuy_stake
@@ -1139,9 +1171,15 @@ function GameAction:leavegameAction(args)
         return result
     end 
 
+    local game_runtime = instance:getGameRuntime()
+        local players = game_runtime:getPlayers(game_id)
+        local inspect = require("inspect")
+        cc.printdebug("players for game before leave %s: %s", game_id, inspect(players))
     -- remove the game to user's joined games list
     local user_runtime = instance:getUserRuntime()
     user_runtime:leaveGame(game_id)
+        local players = game_runtime:getPlayers(game_id)
+        cc.printdebug("players for game after leave %s: %s", game_id, inspect(players))
 
     return 
 end

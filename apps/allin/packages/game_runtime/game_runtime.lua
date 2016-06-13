@@ -32,15 +32,27 @@ function Game_Runtime:setPlayers(game_id, players)
 end
 
 function Game_Runtime:addPlayer(game_id, user_id)
-    return self._redis:sadd(_GAME_RUNTIME_SET .. game_id, user_id)
+    local res, err = self._redis:sadd(_GAME_RUNTIME_SET .. game_id, user_id)
+    if not res then
+        cc.throw("failed to add player %s to game %s: %s", user_id, game_id, err)
+    end
+    return res
 end
 
 function Game_Runtime:removePlayer(game_id, user_id)
-    return self._redis:srem(_GAME_RUNTIME_SET .. game_id, user_id)
+    local res, err = self._redis:srem(_GAME_RUNTIME_SET .. game_id, user_id)
+    if not res then
+        cc.throw("failed to remove player %s from game %s: %s", user_id, game_id, err)
+    end
+    return res
 end
 
 function Game_Runtime:getPlayers(game_id)
-    return self._redis:smembers(_GAME_RUNTIME_SET .. game_id)
+    local res, err =  self._redis:smembers(_GAME_RUNTIME_SET .. game_id)
+    if not res then
+        cc.throw("failed to get players for game %s: %s", game_id, err)
+    end
+    return res
 end
 
 function Game_Runtime:getPlayerCount(game_id)
