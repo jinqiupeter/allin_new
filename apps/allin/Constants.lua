@@ -130,6 +130,7 @@ _M.ErrorMsg = {
     RebuyNotAllowed                 = "本游戏不允许Rebuy",
     RebuyLimitExceeded              = "您已Rebuy达到%s次，不能再Rebuy了",
     RebuyNotAllowedInCurrentLevel   = "当前级别(%s)不再允许Rebuy",
+    StillHaveStake                  = "您当前还有剩余筹码%s，筹码不为零时不允许Rebuy",
 }
 
 return table.readonly(_M)

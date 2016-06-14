@@ -220,7 +220,11 @@ _handleGAMEINFO = function (parts, args)
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
 
     -- get extra game info
-    local sql = "SELECT buying_gold, buying_stake, UNIX_TIMESTAMP(created_at) AS created_at FROM game where id = " .. result.data.game_id
+    local sql = "SELECT  UNIX_TIMESTAMP(g.created_at) AS created_at, g.game_mode, g.blinds_start, ge.blind_time, g.buying_gold, g.buying_stake, ge.duration, ge.allow_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times "
+             .. " FROM game g, game_extra ge WHERE "
+             .. " g.id = " .. result.data.game_id 
+             .. " AND g.id = ge.game_id "
+
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -232,6 +236,16 @@ _handleGAMEINFO = function (parts, args)
 
     result.data.buying_gold = dbres[1].buying_gold
     result.data.buying_stake = dbres[1].buying_stake
+    result.data.allow_rebuy = dbres[1].allow_rebuy
+    result.data.allow_rebuy_times = dbres[1].allow_rebuy_times
+    result.data.allow_rebuy_before_level = dbres[1].allow_rebuy_before_level
+    result.data.blind_start = dbres[1].blinds_start
+    result.data.blind_time = dbres[1].blind_time
+
+    local game_runtime = instance:getGameRuntime()
+    result.data.current_blind = game_runtime:getGameInfo(result.data.game_id, "BlindAmount")
+        
+
     if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
         local game_runtime = instance:getGameRuntime()
         local started_at = game_runtime:getGameInfo(result.data.game_id, "StartedAt")
@@ -239,7 +253,12 @@ _handleGAMEINFO = function (parts, args)
     elseif tonumber(result.data.game_state) == Constants.GameState.GameStateWaiting then
         result.data.started_at = dbres[1].created_at
     end
-    result.data.ending_at = ""
+    
+    if tonumber(result.data.game_mode) == Constants.GameMode.GameModeRingGame then
+        result.data.ending_at = tonumber(result.data.started_at) + tonumber(dbres[1].duration)
+    else 
+        result.data.ending_at = ""
+    end
 
     return result
 end
@@ -1013,6 +1032,30 @@ function GameAction:rebuyAction(args)
             return result
         end
     elseif tonumber(game.game_mode) == Constants.GameMode.GameModeSNG or tonumber(game.game_mode) == Constants.GameMode.GameModeFreezeOut then
+        local sub_query = "SELECT MAX(updated_at) as updated_at FROM buying WHERE "
+                        .. " game_id = " .. game_id 
+                        .. " AND user_id = " .. instance:getCid()
+        local sql = "SELECT stake_available FROM buying WHERE "
+                    .. " updated_at = (" .. sub_query .. ")"
+                    .. " AND game_id = " .. game_id 
+                    .. " AND user_id = " .. instance:getCid()
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            result.data.state = Constants.Error.MysqlError
+            result.data.msg = "数据库错误: " .. err
+            return result
+        end
+
+        -- only allow rebuy when user lost all stakes
+        local stake_available = tonumber(dbres[1].stake_available) 
+        if stake_available > 0 then
+            result.data.msg = string_format(Constants.ErrorMsg.StillHaveStake, stake_available)
+            result.data.state = Constants.Error.PermissionDenied
+            return result
+        end
+        
+
         if tonumber(game.allow_rebuy) ~= 1 then
             result.data.msg = Constants.ErrorMsg.RebuyNotAllowed
             result.data.state = Constants.Error.PermissionDenied
@@ -1021,7 +1064,7 @@ function GameAction:rebuyAction(args)
             result.data.msg = string_format(Constants.ErrorMsg.RebuyLimitExceeded, rebuy_count)
             result.data.state = Constants.Error.PermissionDenied
             return result
-        elseif level >= game.allow_rebuy_before_level then
+        elseif level >= game.allow_rebuy_before_level and tonumber(game.game_mode) == Constants.GameMode.GameModeFreezeOut then
             result.data.msg = Constants.ErrorMsg.RebuyNotAllowedInCurrentLevel
             result.data.state = Constants.Error.PermissionDenied
             return result

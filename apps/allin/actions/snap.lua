@@ -204,6 +204,14 @@ _handleGameState = function (snap_value, args)
     elseif game_state == Constants.Snap.GameState.SnapGameStateBroke then
         value.broken_player_id = snap_value[2]
         value.broken_player_position = snap_value[3]  -- TODO: what does this mean?
+    elseif game_state == Constants.Snap.GameState.SnapGameStateBlinds then
+        value.small_blind = snap_value[2] 
+        value.big_blind = snap_value[3]
+        -- update game.blind_amount
+        if tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, game_id, table_id)) then
+            local game_runtime = instance:getGameRuntime()
+            game_runtime:setGameInfo(game_id, "BlindAmount", value.big_blind)
+        end
     elseif game_state == Constants.Snap.GameState.SnapGameStateStart then
         -- record is inserted in _updateUserGameHistory 
         sql = " UPDATE user_game_history SET started_at = NOW() "
@@ -368,11 +376,6 @@ _handleTable = function (snap_value, args)
 
     -- current blind amount
     value.blind_amount = head
-    -- update game.blind_amount
-    if tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, game_id, table_id)) then
-        local game_runtime = instance:getGameRuntime()
-        game_runtime:setGameInfo(game_id, "BlindAmount", value.blind_amount)
-    end
 
     head = table.remove(snap_value, 1)
     -- minimum bet amount

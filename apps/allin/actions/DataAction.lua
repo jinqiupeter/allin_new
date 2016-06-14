@@ -411,8 +411,10 @@ function DataAction:showgamedataAction(args)
         end
 
         result.data.time_elapsed = dbres[1].time_elapsed
-    else
+    elseif tonumber(game_state) == Constants.GameState.GameStateStarted then
         result.data.time_elapsed = os.time() - started_at
+    else 
+        result.data.time_elapsed = 0
     end
 
     return result
