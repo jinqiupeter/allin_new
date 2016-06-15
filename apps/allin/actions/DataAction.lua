@@ -399,8 +399,7 @@ function DataAction:showgamedataAction(args)
     result.data.blind_amount = blind_amount
     result.data.duration = duration
     if tonumber(game_state) == Constants.GameState.GameStateEnded then
-        local started_str = os.date('%Y-%m-%d %H:%M:%S', started_at)
-        local sql = " SELECT MAX(updated_at) - FROM_UNIXTIME(" .. started_str .. ") as time_elapsed FROM buying"
+        local sql = " SELECT MAX(updated_at) - FROM_UNIXTIME(" .. tonumber(started_at) .. ") as time_elapsed FROM buying"
                        .. " WHERE game_id = " .. game_id
         cc.printdebug("executing sql: %s", sql)
         local dbres, err, errno, sqlstate = mysql:query(sql)

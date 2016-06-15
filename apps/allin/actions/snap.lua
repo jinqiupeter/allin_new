@@ -51,6 +51,7 @@ function Snap:_updateGameStake(occupied_seats, args)
     for key, value in pairs(occupied_seats) do
         local user_id = value.player_id
         local stake = value.player_stake
+        local rebuy_stake = value.rebuy_stake
 
         cc.printdebug("updating stake: %s for user: %s", stake, user_id)
         local sql = "INSERT INTO game_stake (game_id, table_id, hand_id, user_id, stake ) "
@@ -78,7 +79,7 @@ function Snap:_updateGameStake(occupied_seats, args)
             cc.throw("db err: %s", err)
         end
         local last_id = dbres[1].id
-        local sql = " UPDATE buying SET stake_available = " .. stake
+        local sql = " UPDATE buying SET stake_available = " .. tonumber(stake) + tonumber(rebuy_stake)
                     .. " , updated_at = now() "
                     .. " WHERE id =  " .. last_id 
         cc.printdebug("executing sql: %s", sql)
@@ -207,10 +208,18 @@ _handleGameState = function (snap_value, args)
     elseif game_state == Constants.Snap.GameState.SnapGameStateBlinds then
         value.small_blind = snap_value[2] 
         value.big_blind = snap_value[3]
+        value.blind_level = snap_value[4]
+        value.next_level = snap_value[5]
+        value.next_amount = snap_value[6]
+        value.last_blind_time = snap_value[7]
         -- update game.blind_amount
         if tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, game_id, table_id)) then
             local game_runtime = instance:getGameRuntime()
             game_runtime:setGameInfo(game_id, "BlindAmount", value.big_blind)
+            game_runtime:setGameInfo(game_id, "BlindLevel", value.blind_level)
+            game_runtime:setGameInfo(game_id, "NextLevel", value.next_level or 0)
+            game_runtime:setGameInfo(game_id, "NextAmount", value.next_amount or 0)
+            game_runtime:setGameInfo(game_id, "LastBlindTime", value.last_blind_time)
         end
     elseif game_state == Constants.Snap.GameState.SnapGameStateStart then
         -- record is inserted in _updateUserGameHistory 
@@ -339,16 +348,17 @@ _handleTable = function (snap_value, args)
             sit_out = 1
         end
         local player_stake          = tmp[4]
-        local bet_amount            = tmp[5] -- bet amount
-        local last_action           = tmp[6] -- 0: None, 1: ResetAction, 2: Check, 3: Fold, 4: Call, 5: Bet, 6: Raise, 7: Allin, 8: Show, 9: Muck, 10: Sitout, 11: Back
-        local hole_cards            = tmp[7] or ""
+        local rebuy_stake           = tmp[5]
+        local bet_amount            = tmp[6] -- bet amount
+        local last_action           = tmp[7] -- 0: None, 1: ResetAction, 2: Check, 3: Fold, 4: Call, 5: Bet, 6: Raise, 7: Allin, 8: Show, 9: Muck, 10: Sitout, 11: Back
+        local hole_cards            = tmp[8] or ""
 
         if (seat_no == value.dealer) then
             local game_runtime = instance:getGameRuntime()
             game_runtime:setGameInfo(game_id, "TableDealer_" .. table_id, "" .. table_id .. ":" .. player_id)
         end
 
-        occupied_seats[i] = {seat_no = seat_no, player_id = player_id, in_round = in_round, sit_out = sit_out, player_stake = player_stake, bet_amount = bet_amount, last_action = last_action, hole_cards = hole_cards}
+        occupied_seats[i] = {seat_no = seat_no, player_id = player_id, in_round = in_round, sit_out = sit_out, player_stake = player_stake, rebuy_stake = rebuy_stake, bet_amount = bet_amount, last_action = last_action, hole_cards = hole_cards}
 
 
         head = table.remove(snap_value, 1)
@@ -375,10 +385,27 @@ _handleTable = function (snap_value, args)
     value.pots = pots 
 
     -- current blind amount
+    value.current_amount = head
     value.blind_amount = head
 
+    -- current blind level
     head = table.remove(snap_value, 1)
+    value.current_level = head
+
+    -- next blind amount
+    head = table.remove(snap_value, 1)
+    value.next_amount = head
+
+    -- next blind level
+    head = table.remove(snap_value, 1)
+    value.next_level = head
+
+    -- last blind time
+    head = table.remove(snap_value, 1)
+    value.last_blind_time = head
+
     -- minimum bet amount
+    head = table.remove(snap_value, 1)
     value.minimus_bet = head
 
     -- only dealer should update game_stake table at the end of current hand

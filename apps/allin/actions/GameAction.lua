@@ -243,13 +243,21 @@ _handleGAMEINFO = function (parts, args)
     result.data.blind_time = dbres[1].blind_time
 
     local game_runtime = instance:getGameRuntime()
-    result.data.current_blind = game_runtime:getGameInfo(result.data.game_id, "BlindAmount")
+    result.data.current_amount = game_runtime:getGameInfo(result.data.game_id, "BlindAmount")
+    result.data.current_level = game_runtime:getGameInfo(result.data.game_id, "BlindLevel")
         
 
     if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
         local game_runtime = instance:getGameRuntime()
         local started_at = game_runtime:getGameInfo(result.data.game_id, "StartedAt")
+        local next_level = game_runtime:getGameInfo(result.data.game_id, "NextLevel")
+        local next_amount = game_runtime:getGameInfo(result.data.game_id, "NextAmount")
+        local last_blind_time = game_runtime:getGameInfo(result.data.game_id, "LastBlindTime")
+
         result.data.started_at = started_at
+        result.data.next_level = next_level
+        result.data.next_amount = next_amount
+        result.data.last_blind_time = last_blind_time
     elseif tonumber(result.data.game_state) == Constants.GameState.GameStateWaiting then
         result.data.started_at = dbres[1].created_at
     end
@@ -789,6 +797,7 @@ function GameAction:creategameAction(args)
     -- set GameState to start and GameAmount to blinds_start
     local game_runtime = instance:getGameRuntime()
     game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
+    game_runtime:setGameInfo(game_id, "BlindLevel", 1)
     game_runtime:setGameInfo(game_id, "GameMode", game_mode)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
 
