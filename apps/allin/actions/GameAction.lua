@@ -1086,15 +1086,17 @@ function GameAction:rebuyAction(args)
 
     -- buy required stake no matter if user has stake left
     local required_stake  = game.buying_stake
+    local gold_needed = game.buying_gold
     if tonumber(game.game_mode) == Constants.GameMode.GameModeRingGame then
         required_stake = amount
+        gold_needed = amount
     end
 
     local res = Helper:buyStake(instance, required_stake, {
                                                 game_id = game_id,
                                                 ignore_stake_left = true,
                                                 blinds_start = blind_amount,
-                                                gold_needed = amount
+                                                gold_needed = gold_needed
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
@@ -1186,7 +1188,7 @@ function GameAction:respiteAction(args)
     end 
 
     result.data.state = 0
-    result.data.respite_bought = rebuy_stake
+    result.data.respite_bought = respite_bought
     result.data.msg = "respite bought: " .. respite_bought
     return result
 end
