@@ -57,6 +57,7 @@ function DataAction:gamesplayedAction(args)
     .. " AND a.user_id = b.user_id "
     .. " AND a.updated_at = b.updated_at"
     .. " GROUP BY b.game_id "
+    .. " ORDER BY ended_at DESC "
     .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
@@ -320,6 +321,7 @@ function DataAction:listgamesinclubAction(args)
                 .. " WHERE g.club_id = " .. club_id
                 .. " AND g.id = b.game_id "
                 .. " GROUP BY b.game_id"
+                .. " ORDER BY b.ended_at DESC "
                 .. " LIMIT " .. offset .. ", " .. limit
 
     cc.printdebug("executing sql: %s", sql)
