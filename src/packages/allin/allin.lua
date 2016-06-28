@@ -128,7 +128,7 @@ function Allin:receive()
     return socket:receive()
 end
 
-function Allin:makeAllinLoop(id, mysql)
+function Allin:makeAllinLoop(id, mysql, redis)
     if not Loop then
         return nil, "not support subscribe loop in current platform"
     end
@@ -140,7 +140,7 @@ function Allin:makeAllinLoop(id, mysql)
         return nil, err
     end
     --]]
-    return Loop:new(self, id, mysql)
+    return Loop:new(self, id, mysql, redis)
 end
 
 -- private

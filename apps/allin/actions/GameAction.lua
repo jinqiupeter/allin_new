@@ -10,6 +10,8 @@ GameAction.ACCEPTED_REQUEST_TYPE = "websocket"
 -- private
 local snap = cc.import(".snap")
 local WinnerPool = cc.import(".WinnerPool")
+local Game_Runtime = cc.import("#game_runtime")
+local User_Runtime = cc.import("#user_runtime")
 
 local _updateUserGameHistory = function (mysql, args)
     local user_id = args.user_id
@@ -97,10 +99,9 @@ _handleGAMELIST = function (parts, args)
     end
 
     local sql = "SELECT g.id, CASE WHEN g.password != '' THEN 1 ELSE 0 END AS password_protected, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, game_mode, u.nickname "
-                .. " FROM game g, club c, user u, user_game_history ug"
+                .. " FROM game g, club c, user u"
                 .. " WHERE g.deleted != 1 "
                 .. " AND g.id IN " .. game_id_condition 
-                .. " AND g.id = ug.game_id "
                 .. " AND g.club_id = c.id " 
                 .. " AND g.owner_id = u.id"
                 .. " AND g.club_id IN " .. club_id_condition
@@ -117,7 +118,7 @@ _handleGAMELIST = function (parts, args)
     result.data.offset = offset
 
     -- check if current user has joined the games found, to support Cash Game and sitout/sitback
-    local game_runtime = instance:getGameRuntime()
+    local game_runtime = Game_Runtime:new(instance, redis)
     local index = 1
     while index <= #result.data.games do
         local found_id = result.data.games[index].id 
@@ -161,7 +162,7 @@ _handleGAMEINFO = function (parts, args)
 
     if tonumber(result.data.game_state) == Constants.GameState.GameStateEnded then
         -- delete game info because it's not needed anymore
-        local game_runtime = instance:getGameRuntime()
+        local game_runtime = Game_Runtime:new(instance, redis)
         game_runtime:deleteInfo(result.data.game_id)
     end
 
@@ -242,13 +243,13 @@ _handleGAMEINFO = function (parts, args)
     result.data.blind_start = dbres[1].blinds_start
     result.data.blind_time = dbres[1].blind_time
 
-    local game_runtime = instance:getGameRuntime()
+    local game_runtime = Game_Runtime:new(instance, redis)
     result.data.current_amount = game_runtime:getGameInfo(result.data.game_id, "BlindAmount")
     result.data.current_level = game_runtime:getGameInfo(result.data.game_id, "BlindLevel")
         
 
     if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
-        local game_runtime = instance:getGameRuntime()
+        local game_runtime = Game_Runtime:new(instance, redis)
         local started_at = game_runtime:getGameInfo(result.data.game_id, "StartedAt")
         local next_level = game_runtime:getGameInfo(result.data.game_id, "NextLevel")
         local next_amount = game_runtime:getGameInfo(result.data.game_id, "NextAmount")
@@ -795,27 +796,12 @@ function GameAction:creategameAction(args)
     end
 
     -- set GameState to start and GameAmount to blinds_start
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
     game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
     game_runtime:setGameInfo(game_id, "BlindLevel", 1)
     game_runtime:setGameInfo(game_id, "GameMode", game_mode)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
-
-    -- add the game to user's joined games list
-    local user_runtime = instance:getUserRuntime()
-    user_runtime:joinGame(game_id)
-
-    -- creator is automatically joined into the game
-    local sql = "INSERT INTO user_game_history (user_id, game_id, joined_at) "
-            .. " VALUES (" .. instance:getCid() .. ", " 
-            .. game_id .. ", " 
-            .. " NOW())"
-          .. " ON DUPLICATE KEY UPDATE joined_at = NOW()" 
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        cc.throw("db err: %s", err)
-    end
 
     -- now send message to holdingnuts
     --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
@@ -941,7 +927,8 @@ function GameAction:joingameAction(args)
     end
 
     -- stake left must be larger than current blind amount, which is created in game.creategame and updated in snap.TableSnap
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
     local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
         
     -- buy required stake
@@ -985,7 +972,7 @@ function GameAction:joingameAction(args)
     end
 
     -- add the game to user's joined games list
-    local user_runtime = instance:getUserRuntime()
+    local user_runtime = User_Runtime:new(instance, redis)
     user_runtime:joinGame(game_id)
 
     --TODO: add user to leancloud channel to receive reminder
@@ -1028,8 +1015,9 @@ function GameAction:rebuyAction(args)
     end
     local game = dbres[1]
 
-    local user_runtime = instance:getUserRuntime()
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local user_runtime = User_Runtime:new(instance, redis)
+    local game_runtime = Game_Runtime:new(instance, redis)
     local rebuy_count = tonumber(user_runtime:getRebuyCount(game_id)) or 0
     local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount"))
     local level = blind_amount  / tonumber(game.blinds_start)
@@ -1144,8 +1132,9 @@ function GameAction:respiteAction(args)
     end
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local game_runtime = instance:getGameRuntime()
-    local user_runtime = instance:getUserRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local user_runtime = User_Runtime:new(instance, redis)
 
     -- check if game has started or not
     local game_state = game_runtime:getGameInfo(game_id, "GameState")
@@ -1225,12 +1214,13 @@ function GameAction:leavegameAction(args)
         return result
     end 
 
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
         local players = game_runtime:getPlayers(game_id)
         local inspect = require("inspect")
         cc.printdebug("players for game before leave %s: %s", game_id, inspect(players))
     -- remove the game to user's joined games list
-    local user_runtime = instance:getUserRuntime()
+    local user_runtime = User_Runtime:new(instance, redis)
     user_runtime:leaveGame(game_id)
         local players = game_runtime:getPlayers(game_id)
         cc.printdebug("players for game after leave %s: %s", game_id, inspect(players))
@@ -1415,7 +1405,8 @@ function GameAction:startgameAction(args)
         return result
     end
 
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
     local player_count = game_runtime:getPlayerCount(game_id)
     if tonumber(player_count) < 2 then
         result.data.state = Constants.Error.LogicError
@@ -1632,11 +1623,15 @@ end
 function GameAction:onDisconnect(event)
     local instance = self:getInstance()
     local allin = instance:getAllin()
-    local user_runtime = instance:getUserRuntime()
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+
+    local user_runtime = User_Runtime:new(instance, redis)
+    local game_runtime = Game_Runtime:new(instance, redis)
     local joined_games = user_runtime:getJoinedGames()
 
     -- unregister user in Sit&Go games
+    local inspect = require("inspect")
+    cc.printdebug("user %s joined games: %s", instance:getCid(), inspect(joined_games))
     for key, value in pairs(joined_games) do
         local game_mode = game_runtime:getGameInfo(value, "GameMode")
         if game_mode ~= nil and tonumber(game_mode) == Constants.GameMode.GameModeRingGame then

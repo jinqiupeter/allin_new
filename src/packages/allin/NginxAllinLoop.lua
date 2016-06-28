@@ -13,9 +13,10 @@ local NginxAllinLoop = cc.class("NginxAllinLoop")
 
 local _loop, _cleanup, _onmessage, _onerror
 
-function NginxAllinLoop:ctor(allin, id, mysql)
+function NginxAllinLoop:ctor(allin, id, mysql, redis)
     self._allin = allin
     self._mysql = mysql
+    self._redis = redis
     id = id or ""
     cc.printdebug("id : %s", id)
     self._id = id .. "_" .. string_sub(tostring(self), 10)
@@ -44,6 +45,7 @@ _loop = function(self, onmessage, onerror)
     local id         = self._id
     local allin      = self._allin
     local mysql      = self._mysql
+    local redis      = self._redis
     local running    = true
     local DEBUG = cc.DEBUG > cc.DEBUG_WARN
 
@@ -52,14 +54,14 @@ _loop = function(self, onmessage, onerror)
         local res, err = allin:receive()
         if not res then
             if err ~= "timeout" then
-                cc.printdebug("error receiving data from server: %s", err)
+                cc.printdebug("error receiving data from allin server: %s", err)
                 onerror(err, id)
                 running = false -- stop loop
                 break
             end
         else
             cc.printdebug("received server response: %s", res)
-            onmessage(res, mysql)
+            onmessage(res, mysql, redis)
         end
     end -- loop
 

@@ -3,7 +3,10 @@ local Constants = cc.import(".Constants", "..")
 local gbc = cc.import("#gbc")
 local json = cc.import("#json")
 local DataAction = cc.class("DataAction", gbc.ActionBase)
+local Game_Runtime = cc.import("#game_runtime")
+local User_Runtime = cc.import("#user_runtime")
 DataAction.ACCEPTED_REQUEST_TYPE = "websocket"
+
 -- public methods
 function DataAction:ctor(config)
     DataAction.super.ctor(self, config)
@@ -391,7 +394,8 @@ function DataAction:showgamedataAction(args)
     result.data.offset = offset
     result.data.game_id = game_id
     
-    local game_runtime = instance:getGameRuntime()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
     local started_at = game_runtime:getGameInfo(game_id, "StartedAt")
     local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
     local duration = game_runtime:getGameInfo(game_id, "Duration")
