@@ -4,9 +4,6 @@ local Online = cc.import("#online")
 local gbc = cc.import("#gbc")
 local WebSocketInstance = cc.class("WebSocketInstance", gbc.WebSocketInstanceBase)
 
-local Game_Runtime = cc.import("#game_runtime")
-local User_Runtime = cc.import("#user_runtime")
-
 local _EVENT = table.readonly({
     ALLIN_MESSAGE       = "ALLIN_MESSAGE",
     DISCONNECT          = "DISCONNECT"
@@ -45,8 +42,6 @@ function WebSocketInstance:onConnected()
 
     self._session = session
     self._online = online
-    self._game_runtime = Game_Runtime:new(self)
-    self._user_runtime = User_Runtime:new(self)
 end
 
 function WebSocketInstance:onDisconnected(event)
@@ -119,13 +114,6 @@ function WebSocketInstance:getOnline()
     return self._online
 end
 
-function WebSocketInstance:getGameRuntime()
-    return self._game_runtime
-end
-
-function WebSocketInstance:getUserRuntime()
-    return self._user_runtime
-end
 
 function WebSocketInstance:getClubIds(mysql_conn)
     local mysql = mysql_conn    
@@ -163,26 +151,25 @@ function WebSocketInstance:addCustomLoop()
     end
 
     -- due to same reason as above, redis connection cannot be reused in allin receiving thread. TODO: find out why
-    --[[
     local redis = self:createRedis()
     if not redis then
         cc.throw("cannot create redis connection")
     end
-    --]]
 
     -- create connection to allin server
-    local allin, err = self:getAllin():makeAllinLoop(connectId, mysql)
+    local allin, err = self:getAllin():makeAllinLoop(connectId, mysql, redis)
     if not allin then
         cc.throw("Error creating connnection to allin server: %s", err)
     end
 
-    allin:start(function(message, mysql)
+    allin:start(function(message, mysql, redis)
         cc.printdebug("dispatching user %d with response %s", self:getCid(), message)
         self:dispatchEvent({
-            name    = _EVENT.ALLIN_MESSAGE .. "_" .. self:getConnectId(),
-            message = message,
+            name      = _EVENT.ALLIN_MESSAGE .. "_" .. self:getConnectId(),
+            message   = message,
             websocket = self,
             mysql     = mysql, 
+            redis     = redis,
         })
     end)
     self._allinloop = allin

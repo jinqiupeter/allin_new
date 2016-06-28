@@ -10,10 +10,10 @@ local _USER_JOINED_GAMES        = "_USER_JOINED_GAMES_"
 local _USER_RESPITE_        = "_USER_RESPITE_"
 local _USER_REBUY_        = "_USER_REBUY_"
 
-function User_Runtime:ctor(instance)
+function User_Runtime:ctor(instance, redis)
     self._instance  = instance
-    self._redis     = instance:getRedis()
-    self._game_runtime = Game_Runtime:new(self._instance)
+    self._redis     = redis
+    self._game_runtime = Game_Runtime:new(self._instance, redis)
 end
 
 function User_Runtime:joinGame(game_id)

@@ -12,9 +12,9 @@ local _EVENT = table.readonly({
     REMOVE_PLAYER = "REMOVE_PLAYER",
 })
 
-function Game_Runtime:ctor(instance)
+function Game_Runtime:ctor(instance, redis)
     self._instance  = instance
-    self._redis     = self._instance:getRedis()
+    self._redis     = redis
 end
 
 function Game_Runtime:setPlayers(game_id, players)

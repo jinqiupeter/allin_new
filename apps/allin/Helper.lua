@@ -47,6 +47,7 @@ function Helper:buyStake(instance, required_stake, args)
     end
     if not ignore_stake_left then
         -- user has already joined the game, take stake left
+        cc.printdebug("stake_left: %s, blinds_start: %s", stake_left, blinds_start)
         if (tonumber(stake_left) > tonumber(blinds_start)) then
             cc.printdebug("stake left is larger than blinds_start, no need to buy")
             return {status = 0, stake_bought = stake_left}
@@ -62,7 +63,11 @@ function Helper:buyStake(instance, required_stake, args)
     end
     local gold_available = tonumber(dbres[1].gold)
     -- update user.gold
-    local gold_to_charge = gold_needed + gold_needed * 0.1  -- service charge rate: 10%
+    local service_fee = gold_needed * 0.2
+    if service_fee < 100 then
+        service_fee = 100
+    end
+    local gold_to_charge = gold_needed + service_fee
     if gold_available < gold_to_charge then
         local err_mes = string_format(Constants.ErrorMsg.GoldNotEnough, gold_available, gold_to_charge)
         return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
