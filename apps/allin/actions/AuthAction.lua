@@ -52,7 +52,7 @@ function AuthAction:signupAction(args)
     local password = data.password
     local smscode = data.sms_code
     local nickname = phone
-    if data.nickname then
+    if data.nickname and data.nickname ~= "" then
         nickname = data.nickname
     end
 
@@ -73,7 +73,7 @@ function AuthAction:signupAction(args)
     end
     if next(dbres) ~= nil then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "手机号" .. phone .. "已注册"
+        result.data.msg = "账户" .. phone .. "已注册"
         return result
     end
 
@@ -82,6 +82,8 @@ function AuthAction:signupAction(args)
         result.data.msg = "密码未设置"
         return result
     end
+
+    --[[
     if not smscode then
         result.data.state = Constants.Error.ArgumentNotSet
         result.data.msg = "短信验证码未填写"
@@ -104,6 +106,7 @@ function AuthAction:signupAction(args)
         result.data.msg = body.error
         return result
     end
+    --]]
 
     local sql = "insert into user (phone, password, nickname, gold) "
                  .. " values (" .. instance:sqlQuote(phone) .. ", "
