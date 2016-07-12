@@ -4,7 +4,7 @@ local Game_Runtime = cc.import("#game_runtime")
 local User_Runtime = cc.import("#user_runtime")
 
 local string_split       = string.split
-local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite
+local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleStakeChange, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite
 
 
 -- to support playing more than one game, we need to put these info in a table
@@ -44,7 +44,7 @@ function Snap:_getBetRound(instance, redis, game_id, table_id)
     return betround
 end
 
-function Snap:_updateGameStake(occupied_seats, args)
+function Snap:_updateBuying(occupied_seats, args)
     local game_id = args.game_id
     local table_id = args.table_id
     local mysql = args.mysql
@@ -52,31 +52,15 @@ function Snap:_updateGameStake(occupied_seats, args)
     local instance = args.instance
 
     for key, value in pairs(occupied_seats) do
-        local user_id = value.player_id
-        local stake = value.player_stake
         local rebuy_stake = value.rebuy_stake
-
-        cc.printdebug("updating stake: %s for user: %s", stake, user_id)
-        local sql = "INSERT INTO game_stake (game_id, table_id, hand_id, user_id, stake ) "
-                    .. " VALUES ( " .. game_id .. ", "
-                    .. table_id .. ", "
-                    .. self:_getHand(instance, redis, game_id, table_id) .. ", "
-                    .. user_id .. ", "
-                    .. stake .. ")"
-                    .. " ON DUPLICATE KEY UPDATE stake = " .. stake .. ", "
-                                              .. "updated_at = NOW()" 
-        cc.printdebug("executing sql: %s", sql)
-        local dbres, err, errno, sqlstate = mysql:query(sql)
-        if not dbres then
-            cc.throw("db err: %s", err)
-        end
-
+        local stake = value.player_stake
+        local user_id = value.player_id
         -- update stake_available in buying
         local sub_query = "SELECT id FROM buying WHERE "
          .. " game_id = " .. game_id 
          .. " AND user_id = " .. user_id
          .. " ORDER BY bought_at DESC LIMIT 1"
-        cc.printdebug("executing sql: %s", sql)
+        cc.printdebug("executing sql: %s", sub_query)
         local dbres, err, errno, sqlstate = mysql:query(sub_query)
         if not dbres then
             cc.throw("db err: %s", err)
@@ -90,6 +74,37 @@ function Snap:_updateGameStake(occupied_seats, args)
         if not dbres then
             cc.throw("db err: %s", err)
         end
+    end
+end
+
+function Snap:_updateGameStake(player_stakes, args)
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local mysql = args.mysql
+    local redis = args.redis
+    local instance = args.instance
+
+    for key, value in pairs(player_stakes) do
+        local user_id = value.player_id
+        local stake = value.player_stake
+        local stake_change = value.stake_change
+
+        cc.printdebug("updating stake: %s and stake_change: %s for user: %s", stake, stake_change, user_id)
+        local sql = "INSERT INTO game_stake (game_id, table_id, hand_id, user_id, stake, stake_change ) "
+                    .. " VALUES ( " .. game_id .. ", "
+                    .. table_id .. ", "
+                    .. self:_getHand(instance, redis, game_id, table_id) .. ", "
+                    .. user_id .. ", "
+                    .. stake .. ", "
+                    .. stake_change .. ")"
+                    .. " ON DUPLICATE KEY UPDATE stake = " .. stake .. ", "
+                                              .. "updated_at = NOW()" 
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+        end
+
     end
 end
 
@@ -370,6 +385,11 @@ _handleTable = function (snap_value, args)
     end
     value.occupied_seats = occupied_seats
 
+    -- only dealer should update buying.stake_available table at the end of current hand
+    if tonumber(value.table_state) == Constants.Snap.TableState.EndRound
+      and tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, redis, game_id, table_id)) then
+          self:_updateBuying(occupied_seats, {game_id = game_id, table_id = table_id, mysql = args.mysql, instance = instance, redis = redis})
+    end
 
     -- pots
     local pots = {}
@@ -412,11 +432,7 @@ _handleTable = function (snap_value, args)
     head = table.remove(snap_value, 1)
     value.minimus_bet = head
 
-    -- only dealer should update game_stake table at the end of current hand
-    if tonumber(value.table_state) == Constants.Snap.TableState.EndRound 
-          and tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, redis, game_id, table_id)) then
-        self:_updateGameStake(occupied_seats, {game_id = game_id, table_id = table_id, mysql = args.mysql, instance = instance, redis = redis})
-    end 
+
 
     return value
 end
@@ -524,6 +540,38 @@ _handleWinAmount = function (snap_value, args)
             return value
         end
     end
+
+    return value
+end
+
+_handleStakeChange = function (snap_value, args)
+    -- tcp: SNAP 1:0 6 <1 2 60> ==><1=cid, 2==> player id, 60==>stake change>
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local self = args.self
+    local instance = args.instance
+    local mysql = args.mysql
+    local redis = args.redis
+
+    local index = 1
+    local player_stakes = {}
+    while index <= #snap_value do
+        local info = string_split(snap_value[index], ":")
+        local player_id = info[1]
+        local player_stake = info[2]
+        local stake_change = info[3]
+        player_stakes[index] = {player_id = player_id, player_stake = player_stake, stake_change = stake_change}
+        index = index + 1
+    end
+
+    local value = {}
+    value.player_stakes = player_stakes
+
+
+    -- only dealer should update game_stake table
+    if tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, redis, game_id, table_id)) then
+        self:_updateGameStake(player_stakes, {game_id = game_id, table_id = table_id, mysql = args.mysql, instance = instance, redis = redis})
+    end 
 
     return value
 end
@@ -734,6 +782,7 @@ local _snapHandler = {
     [Constants.Snap.SnapType.SnapTable]               = _handleTable,
     [Constants.Snap.SnapType.SnapCards]               = _handleCards,
     [Constants.Snap.SnapType.SnapWinAmount]           = _handleWinAmount,
+    [Constants.Snap.SnapType.SnapStakeChange]         = _handleStakeChange,
     [Constants.Snap.SnapType.SnapWinPot]              = _handleWinPot,
     [Constants.Snap.SnapType.SnapOddChips]            = _handleOddChips,
     [Constants.Snap.SnapType.SnapPlayerAction]        = _handlePlayerAction,

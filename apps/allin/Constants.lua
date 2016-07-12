@@ -18,6 +18,7 @@ _M.Snap = {
         SnapPlayerCurrent   = 0x0b,
         SnapPlayerShow      = 0x0c,
         SnapRespite         = 0x11,
+        SnapStakeChange     = 0x12,
     },
 
     GameState = {

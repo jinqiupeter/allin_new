@@ -584,24 +584,23 @@ function DataAction:showprevioushandAction(args)
     local hand_id = -1
     if table_hand ~= nil then
         local info = string_split(table_hand, ":")
-        hand_id = info[2]
+        hand_id = tonumber(info[2]) - 1 -- get previous hand
+    end
+    if hand_id <= 0 then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "No previous hand found"
+        return result
     end
 
-    local sub_query = "SELECT game_id, user_id, table_id, hand_id, stake FROM game_stake WHERE "
-                    .. " game_id = " .. game_id 
-                    .. " AND hand_id =  (SELECT MAX(hand_id) FROM game_stake  WHERE " 
-                        .. " hand_id < " .. hand_id 
-                        .. " AND game_id = " .. game_id .. ")"
-    local sql = "SELECT d.hole_cards, c.nickname, b.user_id, a.stake - b.stake as stake_change FROM "
-    .. " game_stake a, (" .. sub_query .. ") b, user c, game_holecards d WHERE "
-    .. " a.game_id = b.game_id AND a.user_id = b.user_id AND a.table_id = b.table_id " 
-    .. " AND a.game_id = " .. game_id .. " AND a.table_id = " .. table_id .. " AND a.hand_id = " .. hand_id
+
+    local sql = "SELECT d.hole_cards, c.nickname, a.user_id, a.stake_change FROM "
+    .. " game_stake a, user c, game_holecards d WHERE "
+    .. " a.game_id = " .. game_id .. " AND a.table_id = " .. table_id .. " AND a.hand_id = " .. hand_id
     .. " AND c.id = a.user_id "
-    .. " AND d.game_id = b.game_id AND d.table_id = b.table_id AND d.hand_id = b.hand_id AND d.user_id = b.user_id "
+    .. " AND d.game_id = a.game_id AND d.table_id = a.table_id AND d.hand_id = a.hand_id AND d.user_id = a.user_id "
     .. " ORDER BY stake_change desc "
 
     cc.printdebug("executing sql: %s", sql)
-    local inspect = require("inspect")
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
         result.data.state = Constants.Error.MysqlError
@@ -611,7 +610,6 @@ function DataAction:showprevioushandAction(args)
 
     result.data.player_data = dbres
     result.data.players_found = #dbres
-    cc.printdebug("previous players : %s", inspect(result.data.player_data))
 
     local sql = "SELECT flop_card, turn_card, river_card FROM game_cc_cards WHERE "
             .. " game_id = " .. game_id
@@ -630,7 +628,6 @@ function DataAction:showprevioushandAction(args)
     result.data.game_id = game_id
     result.data.table_id = table_id
     result.data.hand_id = tonumber(hand_id) - 1
-    cc.printdebug("returning previous hand: %s", inspect(result))
     return result
 end
 
