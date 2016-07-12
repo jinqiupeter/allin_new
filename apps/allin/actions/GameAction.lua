@@ -248,7 +248,8 @@ _handleGAMEINFO = function (parts, args)
     result.data.current_level = game_runtime:getGameInfo(result.data.game_id, "BlindLevel")
         
 
-    if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted then 
+    if tonumber(result.data.game_state) == Constants.GameState.GameStateStarted or 
+        tonumber(result.data.game_state) == Constants.GameState.GameStateEnded then 
         local game_runtime = Game_Runtime:new(instance, redis)
         local started_at = game_runtime:getGameInfo(result.data.game_id, "StartedAt")
         local next_level = game_runtime:getGameInfo(result.data.game_id, "NextLevel")
@@ -929,7 +930,7 @@ function GameAction:joingameAction(args)
     -- stake left must be larger than current blind amount, which is created in game.creategame and updated in snap.TableSnap
     local redis = instance:getRedis()
     local game_runtime = Game_Runtime:new(instance, redis)
-    local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount")
+    local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount") or 0
         
     -- buy required stake
     local required_stake  = game.buying_stake
