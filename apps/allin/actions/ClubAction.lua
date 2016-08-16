@@ -97,7 +97,7 @@ function ClubAction:clubinfoAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT c.id , name, owner_id, area, description, nickname as owner_name" 
+    local sql = "SELECT c.id , name, owner_id, area, funds, description, nickname as owner_name" 
                 .. " FROM club c, user u WHERE "
                 .. " c.id = " .. club_id 
                 .. " AND c.owner_id = u.id"
@@ -131,7 +131,7 @@ function ClubAction:listjoinedclubAction(args)
     local user_clubs = instance:getClubIds(instance:getMysql())
     local condition = table.concat(user_clubs, ", ")
     local mysql = instance:getMysql()
-    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.description, count(b.user_id) as total_members , u.nickname as owner_name FROM club a, user_club b, user u "
+    local sql = "SELECT a.id, a.name, a.owner_id, a.area, a.funds, a.description, count(b.user_id) as total_members , u.nickname as owner_name FROM club a, user_club b, user u "
                 .. " WHERE b.deleted = 0 AND "
                 .. " a.id = b.club_id AND "
                 .. " u.id = a.owner_id AND"
@@ -601,6 +601,75 @@ function ClubAction:disbandclubAction(args)
 
     result.data.state = 0
     result.data.msg = "club " .. club_id .. " disbanded"
+    return result
+end
+
+function ClubAction:addfundsAction(args)
+    local data = args.data
+    local club_id = data.club_id
+    local amount = tonumber(data.amount)
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not amount then
+        result.data.msg = "amount not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+        
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    --[[ SELECT owner_id, nickname, gold FROM club a, user b where deleted = 0 and a.id = 304 and a.owner_id = b.id ]]--
+    local sql = " SELECT owner_id, a.funds AS funds_left,  b.gold AS gold FROM club a, user b "
+                .. " WHERE a.deleted = 0 AND a.id = " .. club_id
+                .. " AND a.owner_id = b.id "
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if next(dbres) == nil then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "club not found: " .. club_id
+        return result
+    end
+    local owner_id = dbres[1].owner_id
+    if owner_id ~= instance:getCid() then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "you are not owner of club " .. club_id .. ". Only the club owner can add gold to club funds"
+        return result
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    if amount > gold_available then
+        result.data.state = Constants.Error.PermissionDenied
+        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughClubFunds, gold_available, amount)
+        result.data.msg = err_mes
+        return result
+    end
+    local funds_left = tonumber(dbres[1].funds_left)
+
+    -- update club funds
+    sql = " UPDATE club set funds = funds + " .. amount .. "  where id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    result.data.state = 0
+    result.data.funds_before = funds_left
+    result.data.funds_after = funds_left + amount
+    result.data.msg = "funds updated"
     return result
 end
 
