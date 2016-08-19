@@ -1,102 +1,179 @@
+local Helper = cc.class("Helper")
+local Constants = cc.import(".Constants")
+local string_split       = string.split
 local string_format = string.format
 
-local json = cc.import("#json")
-local json_encode = json.encode
-local json_decode = json.decode
+function Helper:getSystemConfig(instance, config_name)
+    local mysql = instance:getMysql()
+    if not mysql then
+        cc.throw("not connected to mysql")
+    end
 
-local gbc = cc.import("#gbc")
-
-local Leancloud = cc.class("Leancloud")
-
-function Leancloud:ctor(instance)
-    self._instance  = instance
+    local sql = "SELECT CONVERT(SUBSTRING_INDEX(value,'-',-1),UNSIGNED INTEGER) AS value " 
+                .. " FROM config WHERE name = " .. instance:sqlQuote(config_name) 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return nil
+    end
+    if next(dbres) == nil then
+        return nil
+    end
+    
+    return dbres[1].value;
 end
 
-function Leancloud:requestsms(phone)
-    if not phone then 
-        return nil, "phone number not provided"
+function Helper:buyStake(instance, required_stake, args)
+    local required_stake = tonumber(required_stake)
+    local mysql = instance:getMysql()
+    local game_id = args.game_id    
+    local blinds_start = args.blinds_start
+    local gold_needed = args.gold_needed
+    local ignore_stake_left = args.ignore_stake_left
+
+    local sql = "SELECT stake_available FROM buying WHERE "
+         .. " game_id = " .. game_id 
+         .. " AND user_id = " .. instance:getCid()
+         .. " ORDER BY bought_at DESC LIMIT 1"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {status = 1, stake_bought = 0, err = "db err: " .. err}
+    end
+    local stake_left = 0
+    if #dbres ~= 0 then
+        stake_left = dbres[1].stake_available
+    end
+    if not ignore_stake_left then
+        -- user has already joined the game, take stake left
+        cc.printdebug("stake_left: %s, blinds_start: %s", stake_left, blinds_start)
+        if (tonumber(stake_left) > tonumber(blinds_start)) then
+            cc.printdebug("stake left is larger than blinds_start, no need to buy")
+            return {status = 0, stake_bought = stake_left}
+        end
     end
 
-    local body = "{\"mobilePhoneNumber\":\"" .. phone .. "\"}"
-    --curl command: curl -X POST -H "X-LC-Id: UkJQrQpjsjQAWX6Rx9eMt6Bh-gzGzoHsz" -H "X-LC-Key: CqE2nYdhaTDxsYgcBOECLxK9" -H "Content-Type: application/json" -d '{"mobilePhoneNumber": "18662527616"}' https://api.leancloud.cn/1.1/requestSmsCode
-    return httpc:request_uri("https://api.leancloud.cn/1.1/requestSmsCode", {
-        method = "POST",
-        ssl_verify = false,
-        body = body,
-        headers = default_headers
-    })
+    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {status = 1, stake_bought = 0, err = "db err: " .. err}
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    -- update user.gold
+    local service_fee = gold_needed * 0.2
+    if service_fee < 100 then
+        service_fee = 100
+    end
+    local gold_to_charge = gold_needed + service_fee
+    if gold_available < gold_to_charge then
+        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnough, gold_available, gold_to_charge)
+        return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
+    end
+
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {status = 1, stake_bought = 0, err = "db err: " .. err}
+    end
+    
+    -- create record in buying
+    sql = "INSERT INTO buying (user_id, game_id, gold_spent, stake_bought, stake_available ) "
+          .. " VALUES ( " .. instance:getCid() .. ", "
+          .. game_id .. ", "
+          .. gold_needed .. ", "
+          .. required_stake .. ", "
+          .. tonumber(required_stake) + tonumber(stake_left).. ")"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {status = 1, stake_bought = 0, err = "db err: " .. err}
+    end
+
+    return {status = 0, stake_bought = required_stake}
 end
 
-function Leancloud:verifysms(phone, smscode)
-    if not phone then 
-        return nil, "phone number not provided"
+function Helper:buyTime(instance, args)
+    local mysql = instance:getMysql()
+    local purchase_count = args.purchase_count
+
+    local config_name = "timeout_price_in_gold_1st"
+    if tonumber(purchase_count) >= 1 then
+        config_name = "timeout_price_in_gold_2nd"
     end
-    if not smscode then
-        return nil, "smd code not provided"
+    local timeout_price = tonumber(Helper:getSystemConfig(instance, config_name))
+
+    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {bought = false, err = "db err: " .. err}
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    -- update user.gold
+    local gold_to_charge = timeout_price
+    if gold_available < gold_to_charge then
+        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughTime, gold_available, gold_to_charge)
+        return {bought = false, err = "err: " .. err_mes}
     end
 
-    --"https://api.leancloud.cn/1.1/verifySmsCode/6位数字验证码?mobilePhoneNumber=186xxxxxxxx"
-    local url = "https://api.leancloud.cn/1.1/verifySmsCode/" .. smscode .. "?mobilePhoneNumber=" .. phone
-    return  httpc:request_uri(url, {
-        method = "POST",
-        ssl_verify = false,
-        headers = default_headers
-    })
-
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {bought = false, err = "db err: " .. err}
+    end
+    
+    return {bought = true}
 end
 
-function Leancloud:subscribeChannel(args)
-    local channel = args.channel or ""
-    local installation = args.installation
-    if not installation then
-        cc.printdebug("installation not registered, nothing to do")
-        return
+function Helper:buyAnimation(instance, animation_name)
+    local mysql = instance:getMysql()
+
+    local sql = "SELECT name, name_cn, price FROM animation WHERE "
+         .. " name = " .. instance:sqlQuote(animation_name)
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {bought = false, err = "db err: " .. err}
+    end
+    local price = 0
+    if #dbres ~= 0 then
+        price = tonumber(dbres[1].price)
     end
 
-    cc.printdebug("installation: %s subscribing to channel: %s" , installation, channel)
+    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {bought = false, err = "db err: " .. err}
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    -- update user.gold
+    local gold_to_charge = price
+    if gold_available < gold_to_charge then
+        local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughAnimation, gold_available, gold_to_charge)
+        return {bought = false, err = "err: " .. err_mes}
+    end
 
-    local url = "https://leancloud.cn/1.1/installations/" .. installation
-    local body = {channels={channel}}
-    local json_body = json_encode(body)
-    return  httpc:request_uri(url, {
-        method = "PUT",
-        ssl_verify = false,
-        body = json_body,
-        headers = default_headers
-    })
-
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return {bought = false, err = "db err: " .. err}
+    end
+    
+    return {bought = true, err = "animation bought successfully"}
 end
 
-function Leancloud:push(args, message)
-    local channel = args.channel or ""
-    local push_time = args.push_time
-    if not message then
-        return nil, "message not provided"
-    end
-
-    local url = "https://leancloud.cn/1.1/push"
-    local body = {prod = "dev",
-        data = {
-            alert = message,
-            badge = "Increment",
-            sound = "default"
-        },
-        channels = {channel} 
-    }
-    if push_time then
-        -- YYYY-MM-DDTHH:MM:SS.MMMZ
-        body.push_time = os.date('!%Y-%m-%dT%H:%M:%S.000Z', push_time) -- ! means to convert to utc time
-        cc.printdebug("push time: %s", body.push_time)
-    end
-    local json_body = json_encode(body)
-
-    cc.printdebug("pushing message: %s to channel: %s", message, channel)
-    return  httpc:request_uri(url, {
-        method = "POST",
-        ssl_verify = false,
-        body = json_body,
-        headers = default_headers
-    })
-end
-
-return Leancloud
+return Helper

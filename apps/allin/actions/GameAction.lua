@@ -217,6 +217,8 @@ _handleGAMEINFO = function (parts, args)
     result.data.blinds_start        = info[1]
     result.data.blinds_factor       = info[2]
     result.data.blinds_time         = info[3]
+    result.data.ante                = info[4]
+    result.data.mandatory_straddle  = info[5]
 
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
 
@@ -509,10 +511,22 @@ function GameAction:creategameAction(args)
         return result
     end
 
-    if tonumber(game_mode) == Constants.GameMode.GameModeRingGame then -- 坐下即玩
+    if tonumber(game_mode) == Constants.GameMode.GameModeRingGame then -- 坐下即玩Sit & go
         extra.duration = data.duration
         if not extra.duration then
             result.data.msg = "duration not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+        extra.ante = data.ante
+        if not extra.ante then
+            result.data.msg = "ante not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+        extra.mandatory_straddle = data.mandatory_straddle
+        if not extra.mandatory_straddle then
+            result.data.msg = "mandatory_straddle not provided"
             result.data.state = Constants.Error.ArgumentNotSet
             return result
         end
@@ -745,7 +759,7 @@ function GameAction:creategameAction(args)
     end
 
     -- create record in table game_extra
-    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, winner_pool_max, deny_register_after) "
+    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, mandatory_straddle, winner_pool_max, deny_register_after) "
                       .. " VALUES (" .. game_id .. ", "
                                ..  game_mode .. ", "
                                ..  (extra.duration or 0) .. ", "
@@ -756,6 +770,7 @@ function GameAction:creategameAction(args)
                                ..  (extra.allow_rebuy_times or 0) .. ", "
                                ..  (extra.allow_rebuy_before_level or 0) .. ", "
                                ..  (extra.ante or 0) .. ", "
+                               ..  (extra.mandatory_straddle or 0) .. ", "
                                ..  (extra.winner_pool_max or 0) .. ", "
                                ..  (extra.deny_register_after or 0) .. ") "
     cc.printdebug("executing sql: %s", sql)
@@ -806,17 +821,19 @@ function GameAction:creategameAction(args)
 
     -- now send message to holdingnuts
     --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
-    local message = msgid .. " CREATE game_id:"         .. game_id
-                                .. " type:"             .. game_mode 
-                                .. " players:"          .. max_players 
-                                .. " stake:"            .. buying_stake 
-                                .. " timeout:"          .. timeout
-                                .. " blinds_start:"     .. blinds_start
-                                .. " blinds_factor:"    .. (extra.blinds_factor or 12)
-                                .. " blinds_time:"      .. (extra.blinds_time or 30)
-                                .. " password:"         .. ""  -- password will be checked by gbc in game.joingame
-                                .. " expire_in:"        .. (extra.duration or 0)
-                                .. " \"name:"           .. name .. "\""
+    local message = msgid .. " CREATE game_id:"             .. game_id
+                                .. " type:"                 .. game_mode 
+                                .. " players:"              .. max_players 
+                                .. " stake:"                .. buying_stake 
+                                .. " timeout:"              .. timeout
+                                .. " blinds_start:"         .. blinds_start
+                                .. " blinds_factor:"        .. (extra.blinds_factor or 12)
+                                .. " blinds_time:"          .. (extra.blinds_time or 30)
+                                .. " ante:"                 .. (extra.ante or 0)
+                                .. " mandatory_straddle:"   .. (extra.mandatory_straddle or 0)
+                                .. " password:"             .. ""  -- password will be checked by gbc in game.joingame
+                                .. " expire_in:"            .. (extra.duration or 0)
+                                .. " \"name:"               .. name .. "\""
                                 .. "\n" -- '\n' is mandatory
     cc.printdebug("sending message to allin server: %s", message)
     local allin = instance:getAllin()
@@ -978,6 +995,73 @@ function GameAction:joingameAction(args)
 
     --TODO: add user to leancloud channel to receive reminder
     return 
+end
+
+function GameAction:nextroundstraddleAction(args)
+    local data = args.data
+    local game_id = data.game_id
+    local msgid = args.__id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+    if not game_id then
+        result.data.msg = "game_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"game_id\"")
+        return result
+    end
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local user_runtime = User_Runtime:new(instance, redis)
+
+    local sql = "SELECT game_mode "
+         .. " FROM game WHERE "
+         .. " id = " .. game_id 
+
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if #dbres == 0 then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg   = "game with id: " .. game_id .. " not found"
+        return result
+    end
+    local game = dbres[1]
+
+    if tonumber(game.game_mode) ~= Constants.GameMode.GameModeRingGame then
+        result.data.msg = "game mode error"
+        result.data.state = Constants.Error.LogicError
+        return result
+    end
+
+    -- check if game has started or not
+    local game_state = game_runtime:getGameInfo(game_id, "GameState")
+    if game_state == nil or tonumber(game_state) ~= Constants.GameState.GameStateStarted then
+        result.data.msg = Constants.ErrorMsg.GameNotStarted
+        result.data.state = Constants.Error.LogicError
+        return result
+    end
+
+    local message = msgid .. " STRADDLE " .. game_id .. "\n";
+    cc.printdebug("sending message to allin server: %s", message)
+    local allin = instance:getAllin()
+
+    local bytes, err = allin:sendMessage(message)
+    if not bytes then
+        result.data.state = Constants.Error.AllinError
+        result.data.msg = err
+        cc.printwarn("failed to send message: %s", err)
+        return result
+    end
+
+    return
 end
 
 function GameAction:rebuyAction(args)
@@ -1372,7 +1456,6 @@ function GameAction:startgameAction(args)
         cc.printinfo("argument not provided: \"game_id\"")
         return result
     end
-
 
     self._currentAction = args.action
     self._msgid = msgid
