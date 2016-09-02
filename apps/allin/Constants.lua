@@ -108,7 +108,8 @@ _M.Limit = {
     ListClubApplicationListLimit = 20,
     ListDataLimit = 20,
     ListFriendRequestLimit = 20,
-    ListFriendsLimit = 20
+    ListFriendsLimit = 20,
+    ListUnreadMessage = 20,
 }
 
 _M.Config = {
@@ -117,6 +118,22 @@ _M.Config = {
 
 _M.IAP_SANDBOX_URL                  = "https://sandbox.itunes.apple.com/verifyReceipt"
 _M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceipt"
+
+_M.MessageType = {
+    Club_LevelExpiring              = 1,
+    Club_Annoucement                = 2,
+    Club_NewMemberApply             = 3,
+    Club_NewMemberHandled           = 4,
+    Club_TransferFunds              = 5,
+    Club_JoinGameApply              = 6,
+    Club_JoinGameHandled            = 7,
+    
+    Personal_OfflineMessage         = 8,
+    Personal_FriendRequest          = 9,
+    Personal_FriendHandled          = 10,
+
+    System_Broadcase                = 11,
+}
 
 _M.ErrorMsg = {
     FailedToBuy                     = "买入失败",
@@ -134,7 +151,8 @@ _M.ErrorMsg = {
     RebuyLimitExceeded              = "您已Rebuy达到%s次，不能再Rebuy了",
     RebuyNotAllowedInCurrentLevel   = "当前级别(%s)不再允许Rebuy",
     StillHaveStake                  = "您当前还有剩余筹码%s，筹码不为零时不允许Rebuy",
-    MaxAdminExceeded                = "管理员人数（%s）已达到当前俱乐部级别（%s）的最大管理员人数限制，请升级俱乐部"
+    MaxAdminExceeded                = "管理员人数（%s）已达到当前俱乐部级别（%s）的最大管理员人数限制，请升级俱乐部!",
+    MaxMembersExceeded              = "俱乐部人数（%s）已达到当前俱乐部级别（%s）的最大人数限制，请升级俱乐部!",
 }
 
 return table.readonly(_M)

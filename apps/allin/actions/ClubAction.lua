@@ -97,7 +97,7 @@ function ClubAction:clubinfoAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT c.id , name, owner_id, area, funds, description, nickname as owner_name" 
+    local sql = "SELECT c.id , name, owner_id, area, level, level_expiring_on, upgraded_on, active, funds, description, nickname as owner_name" 
                 .. " FROM club c, user u WHERE "
                 .. " c.id = " .. club_id 
                 .. " AND c.owner_id = u.id"
@@ -465,6 +465,7 @@ function ClubAction:handleapplicationAction(args)
         result.data.msg = "You are not authorized to handle requests for club " .. club_name
         return result
     end
+    local current_level = tonumber(dbres[1].level)
         
 
     sql = " UPDATE club_application set status = " .. status 
@@ -479,6 +480,29 @@ function ClubAction:handleapplicationAction(args)
     end
 
     if status == 1 then
+        -- check if max_members exceeds
+        sql = "SELECT COUNT(*) AS members_count FROM user_club WHERE club_id = " .. club_id .. " AND deleted = 0"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            result.data.state = Constants.Error.MysqlError
+            result.data.msg = "数据库错误: " .. err
+            return result
+        end
+        local members_count = tonumber(dbres[1].members_count)
+
+        local level_info = self:_getLevel({level = current_level, mysql = mysql})
+        if not level_info.found then
+            result.data.state = Constants.Error.NotExist
+            result.data.msg = "invalid level: " .. to_level
+            return result
+        end
+        if level_info.max_members + 1 == members_count then -- include owner
+            result.data.state = Constants.Error.PermissionDenied
+            result.data.msg = string_format(Constants.ErrorMsg.MaxMembersExceeded, members_count, level)
+            return result
+        end
+
         sql = "INSERT INTO user_club (user_id, club_id) "
                           .. " VALUES (" .. user_id .. ", " .. club_id .. ") "
                           .. " ON DUPLICATE KEY UPDATE deleted = 0"
@@ -806,6 +830,159 @@ function ClubAction:listcreatedclubsAction(args)
     end
     result.data.clubs_found = dbres[1].found_rows
     result.data.msg = result.data.clubs_found .. " club(s) found"
+
+    return result
+end
+
+function ClubAction:_getLevel(args)
+    local level = args.level
+    local mysql = args.mysql
+
+    local sql = "SELECT level, monthly_fee, max_members, max_admins FROM club_level WHERE level = " .. level
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return {found = false, err = "db err: " .. err}
+    end
+    
+    return {found = true, level = dbres[1].level,
+                          monthly_fee = dbres[1].monthly_fee,
+                          max_members = dbres[1].max_members,
+                          max_admins = dbres[1].max_admins
+    }
+end
+
+function ClubAction:upgradeAction(args)
+    local data = args.data
+    local club_id = tonumber(data.club_id)
+    local to_level = tonumber(data.to_level)
+    local months = data.months or 1
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not to_level then
+        result.data.msg = "to_level not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+
+    -- check if to_level is defined
+    local level_info = self:_getLevel({level = to_level, mysql = mysql})
+    if not level_info.found then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "invalid level: " .. to_level
+        return result
+    end
+        
+    -- to_level must be greater than current level
+    local sql = "SELECT level AS current_level FROM club WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if next(dbres) == nil then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "club not found: " .. club_id
+        return result
+    end
+    if tonumber(dbres[1].current_level) >= to_level then
+        result.data.state = Constants.Error.LogicError
+        result.data.msg = "level to upgrade: " .. to_level .. " must be greater than current level: " .. dbres[1].current_level
+        return result
+    end
+
+    -- charge monthly fee
+    sql = " CALL charge_monthly_fee(" .. club_id .. ", " .. to_level .. ", " .. months .. ", " .. 0 .. ", " .. instance:getCid() .. ")"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local charged = tonumber(dbres[1].charged)
+    local msg = dbres[1].msg
+    local gold_charged = tonumber(dbres[1].to_charge)
+
+    if charged == 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = msg
+        return result
+    end
+
+    result.data.state = 0
+    result.data.gold_charged = gold_charged
+    result.data.msg = msg
+
+    return result
+end
+
+function ClubAction:extendlevelAction(args)
+    local data = args.data
+    local club_id = tonumber(data.club_id)
+    local months = data.months or 1
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+
+    -- to_level must be greater than current level
+    local sql = "SELECT level AS current_level"
+                .. " FROM club WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if next(dbres) == nil then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "club not found: " .. club_id
+        return result
+    end
+    local current_level = tonumber(dbres[1].current_level)
+
+    -- charge monthly fee
+    sql = " CALL charge_monthly_fee(" .. club_id .. ", " .. current_level .. ", " .. months .. ", " .. 1 .. ", " .. instance:getCid() .. ")"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local charged = tonumber(dbres[1].charged)
+    local msg = dbres[1].msg
+    local gold_charged = tonumber(dbres[1].to_charge)
+
+    if charged == 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = msg
+        return result
+    end
+
+    result.data.state = 0
+    result.data.gold_charged = gold_charged
+    result.data.msg = msg
 
     return result
 end

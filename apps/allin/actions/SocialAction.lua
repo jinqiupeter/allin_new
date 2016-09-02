@@ -320,6 +320,7 @@ function SocialAction:sendprivatemessageAction(args)
     result.data.from = instance:getNickname()
     return result
 end
+
 function SocialAction:listfriendrequestAction(args)
     local data = args.data
     local limit = data.limit or Constants.Limit.ListFriendRequestLimit
@@ -586,4 +587,95 @@ function SocialAction:invitegameAction(args)
     return result
 end
 
+function SocialAction:listunreadmessageAction(args)
+    local data = args.data
+    local limit = data.limit or Constants.Limit.ListUnreadMessage
+    local offset = data.offset or 0
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if limit > Constants.Limit.ListUnreadMessage then
+        result.data.msg = "max number of record limit exceeded, only " .. Constants.Limit.ListUnreadMessage .. " allowed in one query"
+        result.data.state = Constants.Error.PermissionDenied
+        return result
+    end
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local club_id_condition  = "(" .. table.concat(instance:getClubIds(mysql), ", ") .. ")"
+    local sql = "SELECT SQL_CALC_FOUND_ROWS id as message_id, type, from_id, to_id, sent_at,  content "
+                .. " FROM message"
+                .. " WHERE is_read = 0 "
+                .. " AND (to_id =  " .. instance:getCid()
+                .. " OR (to_id = 0  AND from_id in " .. club_id_condition .. ")"
+                .. " OR to_id = -1)"
+                .. " ORDER BY sent_at DESC"
+                .. " LIMIT " .. offset .. ", " .. limit
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+     
+    result.data.state = 0
+    result.data.offset = offset
+    -- decode json string
+    local index = 1
+    while index <= #dbres do
+        local content_str = dbres[index].content
+        local content = json_decode(content_str)
+        dbres[index].content = content
+        
+        index = index + 1
+    end
+    result.data.messages = dbres
+
+    sql = "SELECT FOUND_ROWS() as total_unread"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    result.data.total_unread = dbres[1].total_unread
+    result.data.msg = result.data.total_unread .. " message(s) unread"
+
+    return result
+end
+
+function SocialAction:markasreadAction(args)
+    local data = args.data
+    local message_id = tonumber(data.message_id)
+    local is_read = tonumber(data.is_read) or 1
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not message_id then
+        result.data.msg = " message_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+        
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local sql = " UPDATE message SET is_read = " .. is_read
+                .. " WHERE id = " .. message_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    result.data.state = 0
+    result.data.message_id = message_id
+    result.data.msg = "message " .. message_id .. " is_read marked as " .. is_read
+    return result
+end
 return SocialAction
