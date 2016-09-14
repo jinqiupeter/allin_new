@@ -716,6 +716,9 @@ function GameAction:creategameAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
+
+    -- TODO: only admins are allowed to create game?
+
     local game_id, err = instance:getNextId("game")
     if not game_id then
         result.data.state = Constants.Error.MysqlError
