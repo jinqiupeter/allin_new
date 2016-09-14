@@ -20,6 +20,7 @@ _M.Snap = {
         SnapRespite         = 0x11,
         SnapStakeChange     = 0x12,
         SnapWantToStraddleNextRound = 0x13,
+        SnapBuyInsurance    = 0x14
     },
 
     GameState = {
@@ -33,6 +34,8 @@ _M.Snap = {
         SnapGameStateExpire     = 0x12,
         SnapGameStatePause      = 0x13,
         SnapGameStateResume     = 0x14,
+        SnapGameStateTableSuspend = 0x15,
+        SnapGameStateTableResume = 0x16
     },
 
     TableState = {
@@ -45,7 +48,9 @@ _M.Snap = {
         AskShow         = 6,
         AllFolded       = 7,
         Showdown        = 8,
-        EndRound        = 9
+        EndRound        = 9,
+        Suspend         = 10,
+        Resume          = 11
     },
 
     CardType = {
@@ -133,6 +138,8 @@ _M.ErrorMsg = {
     RebuyLimitExceeded              = "您已Rebuy达到%s次，不能再Rebuy了",
     RebuyNotAllowedInCurrentLevel   = "当前级别(%s)不再允许Rebuy",
     StillHaveStake                  = "您当前还有剩余筹码%s，筹码不为零时不允许Rebuy",
+    CannotStraddle                  = "不允许Straddle",
+    CannotBuyInsurance              = "当前阶段不允许购买保险",
 }
 
 return table.readonly(_M)
