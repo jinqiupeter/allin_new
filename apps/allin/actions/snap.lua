@@ -4,7 +4,7 @@ local Game_Runtime = cc.import("#game_runtime")
 local User_Runtime = cc.import("#user_runtime")
 
 local string_split       = string.split
-local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleStakeChange, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite, _handleWantToStraddleNextRound
+local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleStakeChange, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite, _handleWantToStraddleNextRound, _handleBuyInsurance
 
 
 -- to support playing more than one game, we need to put these info in a table
@@ -268,6 +268,10 @@ _handleGameState = function (snap_value, args)
             local game_runtime = Game_Runtime:new(instance, redis)
             game_runtime:deleteInfo(game_id)
         end
+    end
+    elseif game_state == Constants.Snap.GameState.SnapGameStateTableSuspend then
+        value.reason = snap_value[2]
+        value.tick = snap_value[3]
     end
 
     if sql ~= "" then
@@ -785,6 +789,30 @@ _handleWantToStraddleNextRound = function (snap_value, args)
     return value
 end
 
+_handleBuyInsurance = function (snap_value, args)
+    -- tcp: SNAP 1:0 14 
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local self = args.self
+    local value = {}
+    value.max_payment = snap_value[1]
+    value.outs = string_split(snap_value[2], ":")
+    value.opponent = {}
+    
+    local opponent = string_split(snap_value[3], "-")
+
+    for i= 1, table.getn(opponent) do
+        local cards = string_split(opponent[i],":")
+        local opponent_val = {}
+        opponent_val.seat = table.remove(cards, 1)
+        opponent_val.outs_amount = table.remove(cards, 1)
+        opponent_val.hole = cards
+        value.opponent[i] = opponent_val
+    end
+
+    return value
+end
+
 local _snapHandler = {
     [Constants.Snap.SnapType.SnapGameState]           = _handleGameState,
     [Constants.Snap.SnapType.SnapTable]               = _handleTable,
@@ -798,6 +826,7 @@ local _snapHandler = {
     [Constants.Snap.SnapType.SnapPlayerShow]          = _handlePlayerShow,
     [Constants.Snap.SnapType.SnapRespite]             = _handleRespite,
     [Constants.Snap.SnapType.SnapWantToStraddleNextRound] = _handleWantToStraddleNextRound,
+    [Constants.Snap.SnapType.SnapBuyInsurance]        = _handleBuyInsurance,
 }
 Snap.snapHandler = _snapHandler
 

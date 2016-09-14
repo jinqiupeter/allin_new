@@ -1042,17 +1042,92 @@ function GameAction:nextroundstraddleAction(args)
         result.data.msg = "game mode error"
         result.data.state = Constants.Error.LogicError
         return result
+    -- check if game has started or not
     end
 
-    -- check if game has started or not
     local game_state = game_runtime:getGameInfo(game_id, "GameState")
     if game_state == nil or tonumber(game_state) ~= Constants.GameState.GameStateStarted then
-        result.data.msg = Constants.ErrorMsg.GameNotStarted
+        result.data.msg = Constants.ErrorMsg.CannotStraddle
         result.data.state = Constants.Error.LogicError
         return result
     end
 
-    local message = msgid .. " STRADDLE " .. game_id .. "\n";
+    local message = msgid .. " STRADDLE " .. game_id .. "\n"
+    cc.printdebug("sending message to allin server: %s", message)
+    local allin = instance:getAllin()
+
+    local bytes, err = allin:sendMessage(message)
+    if not bytes then
+        result.data.state = Constants.Error.AllinError
+        result.data.msg = err
+        cc.printwarn("failed to send message: %s", err)
+        return result
+    end
+
+    return
+end
+
+function GameAction:buyinsuranceAction(args)
+    local data = args.data
+    local game_id = data.game_id
+    local msgid = args.__id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+    if not game_id then
+        result.data.msg = "game_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        cc.printinfo("argument not provided: \"game_id\"")
+        return result
+    end
+
+        local instance = self:getInstance()
+    local mysql = instance:getMysql()
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local user_runtime = User_Runtime:new(instance, redis)
+
+    local sql = "SELECT game_mode "
+         .. " FROM game WHERE "
+         .. " id = " .. game_id 
+
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    if #dbres == 0 then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg   = "game with id: " .. game_id .. " not found"
+        return result
+    end
+    local game = dbres[1]
+
+    if tonumber(game.game_mode) ~= Constants.GameMode.GameModeRingGame then
+        result.data.msg = "game mode error"
+        result.data.state = Constants.Error.LogicError
+        return result
+    -- check if game has started or not
+    end
+
+    local game_state = game_runtime:getGameInfo(game_id, "GameState")
+    if game_state == nil or tonumber(game_state) ~= Constants.GameState.SnapGameStateTableSuspend then
+        result.data.msg = Constants.ErrorMsg.CannotBuyInsurance
+        result.data.state = Constants.Error.LogicError
+        return result
+    end
+
+    local buy_cards = data.buy_cards
+    local buy_amount = data.buy_amount
+
+    local message = msgid .. " BUYINSURANCE " .. game_id .. " ".. buy_amount
+    for i=1,table.getn(buy_cards) do
+        message = message.." "..buy_cards[i]    
+    end
+    message = message .."\n"
+
     cc.printdebug("sending message to allin server: %s", message)
     local allin = instance:getAllin()
 
