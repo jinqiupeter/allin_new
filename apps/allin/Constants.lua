@@ -113,7 +113,8 @@ _M.Limit = {
     ListClubApplicationListLimit = 20,
     ListDataLimit = 20,
     ListFriendRequestLimit = 20,
-    ListFriendsLimit = 20
+    ListFriendsLimit = 20,
+    ListUnreadMessage = 20,
 }
 
 _M.Config = {
@@ -123,6 +124,22 @@ _M.Config = {
 _M.IAP_SANDBOX_URL                  = "https://sandbox.itunes.apple.com/verifyReceipt"
 _M.IAP_BUY_URL                      = "https://buy.itunes.apple.com/verifyReceipt"
 
+_M.MessageType = {
+    Club_LevelExpiring              = 1,
+    Club_Annoucement                = 2,
+    Club_NewMemberApply             = 3,
+    Club_NewMemberHandled           = 4,
+    Club_TransferFunds              = 5,
+    Club_JoinGameApply              = 6,
+    Club_JoinGameHandled            = 7,
+    
+    Personal_OfflineMessage         = 8,
+    Personal_FriendRequest          = 9,
+    Personal_FriendHandled          = 10,
+
+    System_Broadcase                = 11,
+}
+
 _M.ErrorMsg = {
     FailedToBuy                     = "买入失败",
     FailedToBuyAnimation            = "购买表情失败",
@@ -130,6 +147,7 @@ _M.ErrorMsg = {
     GoldNotEnough                   = "您的剩余金币(%s) 不足以支付本次买入(%s), 请充值！",
     GoldNotEnoughAnimation          = "您的剩余金币(%s) 不足以购买本表情(%s金币), 请充值！",
     GoldNotEnoughTime               = "您的剩余金币(%s) 不足以购买本次加时(%s金币), 请充值！",
+    GoldNotEnoughClubFunds          = "您的剩余金币(%s) 不足以增加基金(%s金币), 请充值！",
     WrongPassword                   = "密码错误，请确认密码是否正确",
     GameNotStarted                  = "游戏尚未开始",
     GameNotFound                    = "游戏不存在",
@@ -140,6 +158,11 @@ _M.ErrorMsg = {
     StillHaveStake                  = "您当前还有剩余筹码%s，筹码不为零时不允许Rebuy",
     CannotStraddle                  = "不允许Straddle",
     CannotBuyInsurance              = "当前阶段不允许购买保险",
+    MaxAdminExceeded                = "管理员人数（%s）已达到当前俱乐部级别（%s）的最大管理员人数限制，请升级俱乐部!",
+    MaxMembersExceeded              = "俱乐部人数（%s）已达到当前俱乐部级别（%s）的最大人数限制，请升级俱乐部!",
+    CurrentMembersMoreThanTarget    = "当前俱乐部人数（%s）大于目标级别（%s）允许的最大人数（%s），请删除部分成员后重试",
+    YouAreNotAdmin                  = "您不是该俱乐部的管理员，无法进行此次操作！",
+    FundsNotEnough                  = "俱乐部剩余基金（%s）不足，请联系俱乐部创建人充值基金后操作！",
 }
 
 return table.readonly(_M)
