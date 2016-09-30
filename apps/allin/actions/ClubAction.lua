@@ -4,6 +4,7 @@ local gbc = cc.import("#gbc")
 local json = cc.import("#json")
 local ClubAction = cc.class("ClubAction", gbc.ActionBase)
 local string_format = string.format
+local Helper = cc.import(".Helper", "..")
 ClubAction.ACCEPTED_REQUEST_TYPE = "websocket"
 
 -- public methods
@@ -568,7 +569,7 @@ function ClubAction:removememberAction(args)
     result.data.state = 0
     result.data.club_id = club_id
     result.data.user_id = user_id
-    result.data.msg = "user " .. user_id .. " removed from club " .. club
+    result.data.msg = "user " .. user_id .. " removed from club " .. club_id
     return result
 end
 
@@ -855,6 +856,69 @@ function ClubAction:_getLevel(args)
     }
 end
 
+function ClubAction:charge_monthly_fee(args) 
+    local instance = args.instance
+    local club_id = args.club_id
+    local to_level = args.to_level
+    local months = args.months or 1
+    local count_months_left = args.count_months_left
+    local mysql = instance:getMysql()
+
+    local start_date
+    local msg
+
+    local sql = "SELECT a.gold, b.owner_id, b.level_expiring_on FROM user a, club b "
+            .. " WHERE a.id = b.owner_id "
+            .. " AND b.id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return {charged = 0, msg = err}
+    end
+    local gold_available = tonumber(dbres[1].gold)
+    local owner_id = tonumber(dbres[1].owner_id)
+    local expiring_on = dbres[1].level_expiring_on
+
+    -- get monthly fee for target level
+    local sql = "SELECT monthly_fee FROM club_level WHERE level = " .. to_level
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return {charged = 0, msg = err}
+    end
+    local fee = tonumber(dbres[1].monthly_fee)
+    local to_charge = fee * months
+
+    if count_months_left ~= 0 then
+        start_date = instance:sqlQuote(expiring_on);
+    else
+        start_date = 'now()';
+    end
+
+    if owner_id ~= instance:getCid() then
+        msg = "user " .. instance:getCid() .. "  is not owner of club " .. club_id
+        return {charged = 0, msg = msg}
+    elseif gold_available < to_charge then
+        msg = string_format(Constants.ErrorMsg.GoldNotEnoughClubMonthlyFee, gold_available, to_charge)
+        return {charged = 0, msg = msg}
+    else 
+        local sql = " UPDATE user , club  SET user.gold = user.gold - " .. to_charge
+              .. " , club.level = " .. to_level 
+              .. " , club.level_expiring_on = " .. start_date .. " +  interval " .. months .. " month"
+              .. " , club.upgraded_on = now()"
+              .. " WHERE user.id = ".. instance:getCid()
+              .. " ANd club.id = " .. club_id
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.printdebug("database err: " .. err)
+            return {charged = 0, msg = err}
+        end
+    end
+
+    return {charged = 1, msg = "charged " .. to_charge, gold_charged = to_charge}
+end
+
 function ClubAction:changelevelAction(args)
     local data = args.data
     local club_id = tonumber(data.club_id)
@@ -875,7 +939,7 @@ function ClubAction:changelevelAction(args)
         
     local sql = "SELECT a.level AS current_level, count(b.user_id) as total_members FROM club a, user_club b"
                 .. " WHERE a.id = " .. club_id
-                .. " AND b.club_id = a.club_id "
+                .. " AND b.club_id = a.id "
                 .. " AND b.deleted = 0 "
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -916,27 +980,16 @@ function ClubAction:changelevelAction(args)
     end
 
     -- charge monthly fee
-    sql = " CALL charge_monthly_fee(" .. club_id .. ", " .. to_level .. ", " .. months .. ", " .. count_months_left .. ", " .. instance:getCid() .. ")"
-    cc.printdebug("executing sql: %s", sql)
-    local dbres, err, errno, sqlstate = mysql:query(sql)
-    if not dbres then
-        result.data.state = Constants.Error.MysqlError
-        result.data.msg = "数据库错误: " .. err
-        return result
-    end
-    local charged = tonumber(dbres[1].charged)
-    local msg = dbres[1].msg
-    local gold_charged = tonumber(dbres[1].to_charge)
-
-    if charged == 0 then
+    local retval = self:charge_monthly_fee({instance = instance, club_id = club_id, to_level = to_level, months = months, count_months_left = count_months_left})
+    if retval.charged == 0 then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = msg
+        result.data.msg = retval.msg
         return result
     end
 
     result.data.state = 0
-    result.data.gold_charged = gold_charged
-    result.data.msg = msg
+    result.data.gold_charged = retval.gold_charged
+    result.data.msg = retval.msg
 
     return result
 end
@@ -986,11 +1039,16 @@ function ClubAction:transferfundsAction(args)
     end
 
     -- check if i am admin
-    local sql = " SELECT is_admin, funds FROM user_club a, club b WHERE "
-                .. " a.club_id = b.id"
-                .. " AND b.deleted = 0 "
-                .. " AND a.user_id = " .. instance:getCid() 
-                .. " AND a.club_id = " .. club_id
+    local isadmin = Helper:isClubAdmin(instance, {club_id = club_id})
+    if not isadmin then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.YouAreNotAdmin
+        return result
+    end
+
+    -- check available club funds
+    local sql = " SELECT funds FROM  club WHERE "
+                .. " id = " .. club_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -1003,13 +1061,7 @@ function ClubAction:transferfundsAction(args)
         result.data.msg = "club not found: " .. club_id
         return result
     end
-    local is_admin = tonumber(dbres[1].is_admin)
     local funds = tonumber(dbres[1].funds)
-    if is_admin == 0 then
-        result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = Constants.ErrorMsg.YouAreNotAdmin
-        return result
-    end
     if amount > funds then
         result.data.state = Constants.Error.PermissionDenied
         result.data.msg = string_format(Constants.ErrorMsg.FundsNotEnough, funds)

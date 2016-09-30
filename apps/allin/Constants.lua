@@ -20,7 +20,8 @@ _M.Snap = {
         SnapRespite         = 0x11,
         SnapStakeChange     = 0x12,
         SnapWantToStraddleNextRound = 0x13,
-        SnapBuyInsurance    = 0x14
+        SnapBuyInsurance    = 0x14,
+        SnapInsuranceBenefits = 0x15
     },
 
     GameState = {
@@ -148,6 +149,7 @@ _M.ErrorMsg = {
     GoldNotEnoughAnimation          = "您的剩余金币(%s) 不足以购买本表情(%s金币), 请充值！",
     GoldNotEnoughTime               = "您的剩余金币(%s) 不足以购买本次加时(%s金币), 请充值！",
     GoldNotEnoughClubFunds          = "您的剩余金币(%s) 不足以增加基金(%s金币), 请充值！",
+    GoldNotEnoughClubMonthlyFee     = "您的剩余金币(%s) 不足以支付本次购买(%s金币), 请充值！",
     WrongPassword                   = "密码错误，请确认密码是否正确",
     GameNotStarted                  = "游戏尚未开始",
     GameNotFound                    = "游戏不存在",

@@ -1070,6 +1070,7 @@ end
 function GameAction:buyinsuranceAction(args)
     local data = args.data
     local game_id = data.game_id
+    local table_id = data.table_id
     local msgid = args.__id
     local result = {state_type = "action_state", data = {
         action = args.action}
@@ -1112,9 +1113,10 @@ function GameAction:buyinsuranceAction(args)
     -- check if game has started or not
     end
 
-    local game_state = game_runtime:getGameInfo(game_id, "GameState")
-    if game_state == nil or tonumber(game_state) ~= Constants.GameState.SnapGameStateTableSuspend then
-        result.data.msg = Constants.ErrorMsg.CannotBuyInsurance
+    local bet_round =  Helper:_getBetRound(instance, redis, game_id, table_id)
+    cc.printdebug("buyinsuranceAction betround :"..bet_round)
+    if bet_round == nil or (tonumber(bet_round) ~= Constants.Snap.BetRound.Flop and tonumber(bet_round) ~= Constants.Snap.BetRound.Turn) then
+        result.data.msg = Constants.ErrorMsg.CannotBuyInsurance..bet_round
         result.data.state = Constants.Error.LogicError
         return result
     end

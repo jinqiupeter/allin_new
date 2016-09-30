@@ -2,9 +2,10 @@ local Snap       = cc.class("Snap")
 local Constants  = cc.import(".Constants", "..")
 local Game_Runtime = cc.import("#game_runtime")
 local User_Runtime = cc.import("#user_runtime")
+local Helper = cc.import(".Helper", "..")
 
 local string_split       = string.split
-local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleStakeChange, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite, _handleWantToStraddleNextRound, _handleBuyInsurance
+local _handleGameState, _handleTable, _handleCards, _handleWinAmount, _handleStakeChange, _handleWinPot, _handleOddChips, _handlePlayerAction, _handlePlayerCurrent, _handlePlayerShow, _handleFoyer, _handleERR, _handleRespite, _handleWantToStraddleNextRound, _handleBuyInsurance, _handleInsuranceBenefits
 
 
 -- to support playing more than one game, we need to put these info in a table
@@ -32,17 +33,6 @@ function Snap:_getDealer(instance, redis, game_id, table_id)
     return dealer
 end
 
-function Snap:_getBetRound(instance, redis, game_id, table_id)
-    local game_runtime = Game_Runtime:new(instance, redis)
-    local table_betround = game_runtime:getGameInfo(game_id, "TableBetround_" .. table_id)
-    local betround = -1
-    if table_betround ~= nil then
-        local info = string_split(table_betround, ":")
-        betround = info[2]
-    end
-     
-    return betround
-end
 
 function Snap:_updateBuying(occupied_seats, args)
     local game_id = args.game_id
@@ -268,7 +258,6 @@ _handleGameState = function (snap_value, args)
             local game_runtime = Game_Runtime:new(instance, redis)
             game_runtime:deleteInfo(game_id)
         end
-    end
     elseif game_state == Constants.Snap.GameState.SnapGameStateTableSuspend then
         value.reason = snap_value[2]
         value.tick = snap_value[3]
@@ -313,7 +302,7 @@ _handleTable = function (snap_value, args)
     -- clear user_runtime RespiteCount if a new betting round started
     local user_runtime = User_Runtime:new(instance, redis)
     local game_runtime = Game_Runtime:new(instance, redis)
-    local previous_betround = self:_getBetRound(instance, redis, game_id, table_id)
+    local previous_betround = Helper:_getBetRound(instance, redis, game_id, table_id)
     if tonumber(previous_betround) ~= tonumber(value.bet_round) then
         -- whoever receives the new betround snap is responsible for clearing respite count for all players in the game
         local players = game_runtime:getPlayers(game_id)
@@ -721,7 +710,7 @@ _handlePlayerAction = function (snap_value, args)
                 .. game_id .. ", " 
                 .. table_id .. ", " 
                 .. self:_getHand(instance, redis, game_id, table_id) .. ", "
-                .. self:_getBetRound(instance, redis, game_id, table_id) .. ", "
+                .. Helper:_getBetRound(instance, redis, game_id, table_id) .. ", "
                 .. action_type .. ", "
                 .. is_auto .. ", "
                 .. amount .. ") "
@@ -797,9 +786,10 @@ _handleBuyInsurance = function (snap_value, args)
     local value = {}
     value.max_payment = snap_value[1]
     value.outs = string_split(snap_value[2], ":")
+    value.outs_divided = string_split(snap_value[3], ":")
     value.opponent = {}
     
-    local opponent = string_split(snap_value[3], "-")
+    local opponent = string_split(snap_value[4], "-")
 
     for i= 1, table.getn(opponent) do
         local cards = string_split(opponent[i],":")
@@ -810,6 +800,18 @@ _handleBuyInsurance = function (snap_value, args)
         value.opponent[i] = opponent_val
     end
 
+    cc.printdebug("_handleBuyInsurance called")
+    return value
+end
+
+_handleInsuranceBenefits = function (snap_value, args)
+    -- tcp: SNAP 1:0 0x15
+
+    local game_id = args.game_id
+    local table_id = args.table_id
+    local self = args.self
+    local value = {}
+    value.benefits = snap_value[1];
     return value
 end
 
@@ -827,7 +829,9 @@ local _snapHandler = {
     [Constants.Snap.SnapType.SnapRespite]             = _handleRespite,
     [Constants.Snap.SnapType.SnapWantToStraddleNextRound] = _handleWantToStraddleNextRound,
     [Constants.Snap.SnapType.SnapBuyInsurance]        = _handleBuyInsurance,
+    [Constants.Snap.SnapType.SnapInsuranceBenefits]   = _handleInsuranceBenefits,
 }
+
 Snap.snapHandler = _snapHandler
 
 function Snap:handleSNAP(parts, args)

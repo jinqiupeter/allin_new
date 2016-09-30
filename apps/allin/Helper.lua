@@ -2,6 +2,8 @@ local Helper = cc.class("Helper")
 local Constants = cc.import(".Constants")
 local string_split       = string.split
 local string_format = string.format
+local Game_Runtime = cc.import("#game_runtime")
+local User_Runtime = cc.import("#user_runtime")
 
 function Helper:getSystemConfig(instance, config_name)
     local mysql = instance:getMysql()
@@ -160,7 +162,7 @@ function Helper:buyAnimation(instance, animation_name)
     local gold_available = tonumber(dbres[1].gold)
     -- update user.gold
     local gold_to_charge = price
-    if gold_available < gold_to_charge then
+    if gold_avilable < gold_to_charge then
         local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughAnimation, gold_available, gold_to_charge)
         return {bought = false, err = "err: " .. err_mes}
     end
@@ -176,4 +178,41 @@ function Helper:buyAnimation(instance, animation_name)
     return {bought = true, err = "animation bought successfully"}
 end
 
+function Helper:isClubAdmin(instance, args)
+    local mysql = instance:getMysql()
+    local club_id = args.club_id
+
+    -- check if i am admin
+    local sql = " SELECT a.is_admin, b.owner_id FROM user_club a, club b "
+                .. " WHERE a.club_id = b.id"
+                .. " AND b.deleted = 0 "
+                .. " AND a.user_id = " .. instance:getCid() 
+                .. " AND a.club_id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return false;
+    end
+    if next(dbres) == nil then
+        return false;
+    end
+    local is_admin = tonumber(dbres[1].is_admin)
+    local owner_id = tonumber(dbres[1].owner_id)
+    if is_admin == 0 or not owner_id == instance:getCid() then
+        return false;
+    end
+
+    return true;
+end
+function Helper:_getBetRound(instance, redis, game_id, table_id)
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local table_betround = game_runtime:getGameInfo(game_id, "TableBetround_" .. table_id)
+    local betround = -1
+    if table_betround ~= nil then
+        local info = string_split(table_betround, ":")
+        betround = info[2]
+    end
+     
+    return betround
+end
 return Helper
