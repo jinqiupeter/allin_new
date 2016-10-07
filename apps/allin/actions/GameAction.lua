@@ -530,6 +530,14 @@ function GameAction:creategameAction(args)
             result.data.state = Constants.Error.ArgumentNotSet
             return result
         end
+        
+        --insurance
+        extra.insurance = data.insurance
+        if not extra.insurance then
+           result.data.msg = "insurance not provided"
+           result.data.state = Constants.Error.ArgumentNotSet
+           return result
+        end
     elseif tonumber(game_mode) == Constants.GameMode.GameModeFreezeOut then -- MTT
         -- start at
         extra.start_at =  data.start_at
@@ -602,7 +610,7 @@ function GameAction:creategameAction(args)
             result.data.state = Constants.Error.ArgumentNotSet
             return result
         end
-
+        
     elseif tonumber(game_mode) == Constants.GameMode.GameModeSNG then -- SNG
         -- blind factor
         extra.blind_factor = data.blind_factor
@@ -626,7 +634,7 @@ function GameAction:creategameAction(args)
             result.data.msg = "allow_rebuy not provided"
             result.data.state = Constants.Error.ArgumentNotSet
             return result
-        end
+        end    
 
         -- how many times of rebuy allowed?
         extra.allow_rebuy_times = data.allow_rebuy_times
@@ -822,6 +830,11 @@ function GameAction:creategameAction(args)
     game_runtime:setGameInfo(game_id, "GameMode", game_mode)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
 
+    if not extra.insurance then
+        cc.printdebug("extra.insurance nil" )
+    else 
+        cc.printdebug("extra.insurance="..extra.insurance);
+    end
     -- now send message to holdingnuts
     --tcp msg format: CREATE game_id: 23 players:5 stake:1500 timeout:30 blinds_start:20 blinds_factor:20 blinds_time:300 password: "name:peter's game 1"
     local message = msgid .. " CREATE game_id:"             .. game_id
@@ -834,11 +847,13 @@ function GameAction:creategameAction(args)
                                 .. " blinds_time:"          .. (extra.blinds_time or 30)
                                 .. " ante:"                 .. (extra.ante or 0)
                                 .. " mandatory_straddle:"   .. (extra.mandatory_straddle or 0)
+                                .. " enable_insurance:"     .. (extra.insurance or 0)
                                 .. " password:"             .. ""  -- password will be checked by gbc in game.joingame
                                 .. " expire_in:"            .. (extra.duration or 0)
                                 .. " \"name:"               .. name .. "\""
                                 .. "\n" -- '\n' is mandatory
     cc.printdebug("sending message to allin server: %s", message)
+
     local allin = instance:getAllin()
 
     local bytes, err = allin:sendMessage(message)

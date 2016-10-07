@@ -806,12 +806,32 @@ end
 
 _handleInsuranceBenefits = function (snap_value, args)
     -- tcp: SNAP 1:0 0x15
-
+    
+    cc.printdebug("_handleInsuranceBenefits called")
     local game_id = args.game_id
     local table_id = args.table_id
     local self = args.self
     local value = {}
     value.benefits = snap_value[1];
+
+    local instance = args.instance
+    local mysql = args.mysql
+    local redis = args.redis
+    local sql = "INSERT INTO insurance_benefits (user_id, game_id, table_id, hand_id, benefits) " 
+             .. "VALUES (" .. instance:getCid() .. ", " 
+             .. game_id .. ", " 
+             .. table_id .. ", " 
+             .. self:_getHand(instance, redis, game_id, table_id) .. ", "
+             .. value.benefits .. ") "
+
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        value.state = Constants.Error.MysqlError
+        value.msg = "数据库错误: " .. err
+        return value
+    end
     return value
 end
 
