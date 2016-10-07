@@ -614,7 +614,7 @@ function DataAction:showprevioushandAction(args)
     local sql = "SELECT flop_card, turn_card, river_card FROM game_cc_cards WHERE "
             .. " game_id = " .. game_id
             .. " AND table_id = " .. table_id
-            .. " AND hand_id = " .. tonumber(hand_id) - 1 
+            .. " AND hand_id = " .. tonumber(hand_id) 
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then

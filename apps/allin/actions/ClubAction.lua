@@ -685,7 +685,11 @@ function ClubAction:addfundsAction(args)
     local funds_left = tonumber(dbres[1].funds_left)
 
     -- update club funds
-    sql = " UPDATE club set funds = funds + " .. amount .. "  where id = " .. club_id
+    sql = " UPDATE club, user SET club.funds = club.funds + " .. amount 
+        .. ", user.gold = user.gold - " .. amount
+        .. " WHERE club.id = " .. club_id
+        .. " AND club.owner_id = user.id" 
+        .. " AND user.id = " .. instance:getCid()
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -697,6 +701,8 @@ function ClubAction:addfundsAction(args)
     result.data.state = 0
     result.data.funds_before = funds_left
     result.data.funds_after = funds_left + amount
+    result.data.owner_gold_before = gold_available
+    result.data.owner_gold_after = gold_available - amount
     result.data.msg = "funds updated"
     return result
 end
@@ -1088,4 +1094,68 @@ function ClubAction:transferfundsAction(args)
     return result
 end
 
+function ClubAction:updatesettingAction(args)
+    local data = args.data
+    local club_id = tonumber(data.club_id)
+    local newgame_control = tonumber(data.newgame_control)
+    local allow_msg = tonumber(data.allow_msg)
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not newgame_control then
+        result.data.msg = "newgame_control not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not allow_msg then
+        result.data.msg = "allow_msg not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if newgame_control ~= 0 and newgame_control ~= 1 then
+        result.data.msg = "newgame_control must be 0 or 1 "
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if allow_msg ~= 0 and allow_msg ~= 1 then
+        result.data.msg = "allow_msg must be 0 or 1 "
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+
+    local is_owner = Helper:isClubOwner(instance, {club_id = club_id})
+    if not is_owner then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = Constants.ErrorMsg.YouAreNotOwner
+        return result
+    end
+
+    local sql = " UPDATE club set newgame_control = " .. newgame_control
+                .. " , allow_msg = " .. allow_msg
+                .. " WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    result.data.state = 0
+    result.data.msg = "club setting udpated"
+    result.data.allow_msg = allow_msg
+    result.data.newgame_control = newgame_control
+    result.data.club_id = club_id
+
+    return result
+end
 return ClubAction

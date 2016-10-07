@@ -9,6 +9,8 @@ SocialAction.ACCEPTED_REQUEST_TYPE = "websocket"
 
 local json_encode = json.encode
 local json_decode = json.decode
+local Game_Runtime = cc.import("#game_runtime")
+local User_Runtime = cc.import("#user_runtime")
 
 -- public methods
 function SocialAction:ctor(config)
@@ -318,6 +320,7 @@ function SocialAction:sendprivatemessageAction(args)
     result.data.msg = content
     result.data.from_user = instance:getCid()
     result.data.from = instance:getNickname()
+
     return result
 end
 
@@ -423,6 +426,93 @@ function SocialAction:handlefriendrequestAction(args)
     result.data.state = 0
     result.data.from_user = from_user
     result.data.msg = "request handled"
+    return result
+end
+
+-- approve or reject rebuy request
+function SocialAction:handlerebuyrequestAction(args)
+    local data = args.data
+    local game_id = data.game_id
+    local amount = data.amount
+    local player_id = data.for_player
+    local status = data.status
+    local msgid = args.__id
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not game_id then
+        result.data.msg = " game_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not amount then
+        result.data.msg = "amount not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not player_id then
+        result.data.msg = "player_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not status then
+        result.data.msg = "status not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if status < 0 or status > 1 then
+        result.data.msg = "status must be 0 or 1 "
+        result.data.state = Constants.Error.LogicError
+        return result
+    end
+
+    local instance = self:getInstance()
+    local redis = instance:getRedis()
+
+    --  handlerebuyrequestAction is only available for SitAndGo games
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local game_mode = game_runtime:getGameInfo(game_id, "GameMode")
+    if tonumber(game_mode) ~= Constants.GameMode.GameModeRingGame then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = "handlerebuyrequestAction is only available for SitAndGo games"
+        return result
+    end
+        
+    local stake_bought = 0
+    if tonumber(status) == 1 then
+        local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount"))
+        local res = Helper:rebuy(instance, redis, amount, {
+                                                    game_id = game_id,
+                                                    ignore_stake_left = true,
+                                                    blinds_start = blind_amount,
+                                                    gold_needed = amount,
+                                                    for_player = player_id,
+                                                    msgid = msgid
+                                                    })
+        if res.status ~= 0 then
+            result.data.state = Constants.Error.PermissionDenied
+            result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
+            return result
+        end
+        stake_bought = amount
+    end
+
+    -- send notification to from_user
+    local from_user = player_id
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "game.applyrebuyhandle"}}
+    message.data.user_id = instance:getCid()
+    message.data.phone = instance:getPhone()
+    message.data.nickname = instance:getNickname()
+    message.data.stake_bought = stake_bought
+    message.data.notes = "user " .. message.data.nickname .. " handled your rebuy request"
+    message.data.status = status
+    online:sendMessage(from_user, json.encode(message))
+     
+    result.data.state = 0
+    result.data.from_user = from_user
+    result.data.msg = "rebuy request handled"
     return result
 end
 

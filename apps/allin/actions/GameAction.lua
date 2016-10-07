@@ -1,6 +1,9 @@
 local string_split       = string.split
 local string_format = string.format
 local gbc = cc.import("#gbc")
+local json      = cc.import("#json")
+local json_encode = json.encode
+local json_decode = json.decode
 local GameAction = cc.class("GameAction", gbc.ActionBase)
 local WebSocketInstance = cc.import(".WebSocketInstance", "..")
 local Constants = cc.import(".Constants", "..")
@@ -223,7 +226,7 @@ _handleGAMEINFO = function (parts, args)
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
 
     -- get extra game info
-    local sql = "SELECT  UNIX_TIMESTAMP(g.created_at) AS created_at, g.game_mode, g.blinds_start, ge.blind_time, g.buying_gold, g.buying_stake, ge.duration, ge.allow_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times "
+    local sql = "SELECT  UNIX_TIMESTAMP(g.created_at) AS created_at, g.game_mode, g.blinds_start, ge.blind_time, g.buying_gold, g.buying_stake, ge.duration, ge.rebuy_control, ge.max_rebuy, ge.allow_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times "
              .. " FROM game g, game_extra ge WHERE "
              .. " g.id = " .. result.data.game_id 
              .. " AND g.id = ge.game_id "
@@ -237,6 +240,9 @@ _handleGAMEINFO = function (parts, args)
         return result
     end
 
+    result.data.duration = dbres[1].duration
+    result.data.rebuy_control = dbres[1].rebuy_control
+    result.data.max_rebuy = dbres[1].max_rebuy
     result.data.buying_gold = dbres[1].buying_gold
     result.data.buying_stake = dbres[1].buying_stake
     result.data.allow_rebuy = dbres[1].allow_rebuy
@@ -518,6 +524,18 @@ function GameAction:creategameAction(args)
             result.data.state = Constants.Error.ArgumentNotSet
             return result
         end
+        extra.rebuy_control = data.rebuy_control
+        if not extra.rebuy_control then
+            result.data.msg = "rebuy_control not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
+        extra.max_rebuy = data.max_rebuy
+        if not extra.max_rebuy then
+            result.data.msg = "max_rebuy not provided"
+            result.data.state = Constants.Error.ArgumentNotSet
+            return result
+        end
         extra.ante = data.ante
         if not extra.ante then
             result.data.msg = "ante not provided"
@@ -725,7 +743,22 @@ function GameAction:creategameAction(args)
     local instance = self:getInstance()
     local mysql = instance:getMysql()
 
-    -- TODO: only admins are allowed to create game?
+    --  only admins are allowed to create game?
+    local sql = "SELECT newgame_control FROM club WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local newgame_control = tonumber(dbres[1].newgame_control)
+    local is_admin = Helper:isClubAdmin(instance, {club_id = club_id})
+    if newgame_control == 1 and not is_admin then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.YouAreNotAdmin
+        return result
+    end
 
     local game_id, err = instance:getNextId("game")
     if not game_id then
@@ -770,10 +803,12 @@ function GameAction:creategameAction(args)
     end
 
     -- create record in table game_extra
-    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, mandatory_straddle, winner_pool_max, deny_register_after) "
+    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, rebuy_control, max_rebuy, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, mandatory_straddle, winner_pool_max, deny_register_after) "
                       .. " VALUES (" .. game_id .. ", "
                                ..  game_mode .. ", "
                                ..  (extra.duration or 0) .. ", "
+                               ..  (extra.rebuy_control or 0) .. ", "
+                               ..  (extra.max_rebuy or 0) .. ", "
                                ..  (extra.blind_factor or 0) .. ", "
                                ..  (extra.blind_time or 0) .. ", "
                                ..  (extra.start_at or 0) .. ", "
@@ -1176,10 +1211,11 @@ function GameAction:rebuyAction(args)
     end
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT g.game_mode, g.blinds_start, g.buying_gold, g.buying_stake, ge.allow_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times "
-             .. " FROM game g, game_extra ge WHERE "
+    local sql = "SELECT g.game_mode, g.name, g.owner_id, g.blinds_start, g.buying_gold, g.buying_stake, ge.allow_rebuy, ge.rebuy_control, ge.max_rebuy, ge.allow_rebuy_before_level, ge.allow_rebuy_times, c.name AS club_name"
+             .. " FROM game g, game_extra ge, club c WHERE "
              .. " g.id = " .. game_id 
              .. " AND g.id = ge.game_id "
+             .. " AND g.club_id = c.id "
 
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -1194,6 +1230,9 @@ function GameAction:rebuyAction(args)
         return result
     end
     local game = dbres[1]
+    local owner_id = game.owner_id
+    local game_name = game.name
+    local club_name = game.club_name
 
     local redis = instance:getRedis()
     local user_runtime = User_Runtime:new(instance, redis)
@@ -1208,6 +1247,32 @@ function GameAction:rebuyAction(args)
             cc.printinfo("argument not provided: \"amount\"")
             return result
         end
+
+        if amount > tonumber(game.max_rebuy) then
+            result.data.msg = Constants.ErrorMsg.RebuyMaxExceeded
+            result.data.state = Constants.Error.PermissionDenied
+            return result
+        end
+
+        if tonumber(game.rebuy_control) == 1 and owner_id ~= instance:getCid() then
+            -- send to game owner for approval
+            local online = instance:getOnline()
+            local message = {state_type = "server_push", data = {push_type = "game.applyrebuy"}}
+            message.data.user_id = instance:getCid()
+            message.data.phone = instance:getPhone()
+            message.data.nickname = instance:getNickname()
+            message.data.game_id = game_id
+            message.data.game_name = game_name
+            message.data.club_name = club_name
+            message.data.amount = amount
+            online:sendMessage(owner_id, json.encode(message))
+
+            result.data.state = 0
+            result.data.msg = "Rebuy application sent"
+            result.data.amount = amount
+            return result
+        end 
+
     elseif tonumber(game.game_mode) == Constants.GameMode.GameModeSNG or tonumber(game.game_mode) == Constants.GameMode.GameModeFreezeOut then
         local sub_query = "SELECT MAX(updated_at) as updated_at FROM buying WHERE "
                         .. " game_id = " .. game_id 
@@ -1260,38 +1325,22 @@ function GameAction:rebuyAction(args)
         gold_needed = amount
     end
 
-    local res = Helper:buyStake(instance, required_stake, {
+    local res = Helper:rebuy(instance, redis, required_stake, {
                                                 game_id = game_id,
                                                 ignore_stake_left = true,
                                                 blinds_start = blind_amount,
-                                                gold_needed = gold_needed
+                                                gold_needed = gold_needed,
+                                                msgid = msgid
                                                 })
     if res.status ~= 0 then
         result.data.state = Constants.Error.PermissionDenied
         result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
         return result
     end
-    local rebuy_stake = res.stake_bought
-
-    local message = msgid .. " REBUY " .. game_id .. " " .. rebuy_stake ..  "\n";
-    cc.printdebug("sending message to allin server: %s", message)
-    local instance = self:getInstance()
-    local allin = instance:getAllin()
-
-    local bytes, err = allin:sendMessage(message)
-    if not bytes then
-        result.data.state = Constants.Error.AllinError
-        result.data.msg = err
-        cc.printwarn("failed to send message: %s", err)
-        return result
-    end 
-
-    -- increase rebuy account
-    user_runtime:setRebuyCount(game_id, rebuy_count + 1)
 
     result.data.state = 0
-    result.data.stake_bought = rebuy_stake
-    result.data.msg = "stake bought: " .. rebuy_stake
+    result.data.stake_bought = res.stake_bought
+    result.data.msg = "stake bought: " .. res.stake_bought
     return result
 end
 
