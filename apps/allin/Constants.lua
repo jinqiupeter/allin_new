@@ -156,6 +156,7 @@ _M.ErrorMsg = {
     RespiteCountExceeded            = "一次下注最多能购买两次加时",
     RebuyNotAllowed                 = "本游戏不允许Rebuy",
     RebuyLimitExceeded              = "您已Rebuy达到%s次，不能再Rebuy了",
+    RebuyMaxExceeded                = "超过单次最大Rebuy额度",
     RebuyNotAllowedInCurrentLevel   = "当前级别(%s)不再允许Rebuy",
     StillHaveStake                  = "您当前还有剩余筹码%s，筹码不为零时不允许Rebuy",
     CannotStraddle                  = "不允许Straddle",
@@ -164,6 +165,7 @@ _M.ErrorMsg = {
     MaxMembersExceeded              = "俱乐部人数（%s）已达到当前俱乐部级别（%s）的最大人数限制，请升级俱乐部!",
     CurrentMembersMoreThanTarget    = "当前俱乐部人数（%s）大于目标级别（%s）允许的最大人数（%s），请删除部分成员后重试",
     YouAreNotAdmin                  = "您不是该俱乐部的管理员，无法进行此次操作！",
+    YouAreNotOwner                  = "您不是该俱乐部的创建者，无法进行此次操作！",
     FundsNotEnough                  = "俱乐部剩余基金（%s）不足，请联系俱乐部创建人充值基金后操作！",
 }
 

@@ -162,7 +162,7 @@ function Helper:buyAnimation(instance, animation_name)
     local gold_available = tonumber(dbres[1].gold)
     -- update user.gold
     local gold_to_charge = price
-    if gold_avilable < gold_to_charge then
+    if gold_available < gold_to_charge then
         local err_mes = string_format(Constants.ErrorMsg.GoldNotEnoughAnimation, gold_available, gold_to_charge)
         return {bought = false, err = "err: " .. err_mes}
     end
@@ -198,12 +198,35 @@ function Helper:isClubAdmin(instance, args)
     end
     local is_admin = tonumber(dbres[1].is_admin)
     local owner_id = tonumber(dbres[1].owner_id)
-    if is_admin == 0 or not owner_id == instance:getCid() then
+    if is_admin == 0 and owner_id ~= instance:getCid() then
         return false;
     end
 
     return true;
 end
+
+function Helper:isClubOwner(instance, args)
+    local mysql = instance:getMysql()
+    local club_id = args.club_id
+
+    -- check if i am owner of a club
+    local sql = " SELECT owner_id FROM club WHERE id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return false;
+    end
+    if next(dbres) == nil then
+        return false;
+    end
+    local owner_id = tonumber(dbres[1].owner_id)
+    if owner_id ~= instance:getCid() then
+        return false;
+    end
+
+    return true;
+end
+
 function Helper:_getBetRound(instance, redis, game_id, table_id)
     local game_runtime = Game_Runtime:new(instance, redis)
     local table_betround = game_runtime:getGameInfo(game_id, "TableBetround_" .. table_id)
@@ -215,4 +238,37 @@ function Helper:_getBetRound(instance, redis, game_id, table_id)
      
     return betround
 end
+
+function Helper:rebuy(instance, redis, required_stake, args)
+    local game_id = args.game_id
+    local res = self:buyStake(instance, required_stake, {
+                                                game_id = args.game_id,
+                                                ignore_stake_left = args.ignore_stake_left,
+                                                blinds_start = args.blind_amount,
+                                                gold_needed = args.gold_needed
+                                                })
+    if res.status ~= 0 then
+        return {status = Constants.Error.PermissionDenied, err = res.err}
+    end
+    local rebuy_stake = res.stake_bought
+
+    local msgid = args.msgid or 0
+    local player_id = args.for_player or instance:getCid()
+    local message = msgid .. " REBUY " .. game_id .. " " .. rebuy_stake .. " " .. player_id .."\n";
+    cc.printdebug("sending message to allin server: %s", message)
+    local allin = instance:getAllin()
+
+    local bytes, err = allin:sendMessage(message)
+    if not bytes then
+        return {status = Constants.Error.AllinError, err = err}
+    end 
+
+    -- increase rebuy account
+    local user_runtime = User_Runtime:new(instance, redis)
+    local rebuy_count = tonumber(user_runtime:getRebuyCount(game_id)) or 0
+    user_runtime:setRebuyCount(game_id, rebuy_count + 1)
+
+    return {status = 0, stake_bought = rebuy_stake}
+end
+
 return Helper
