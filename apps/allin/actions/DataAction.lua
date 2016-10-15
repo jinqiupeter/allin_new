@@ -366,8 +366,6 @@ function DataAction:showgamedataAction(args)
     local sub_query = " SELECT game_id, user_id, bought_at, MAX(updated_at) as updated_at, sum(stake_bought) as stake_bought FROM buying"
                        .. " WHERE game_id = " .. game_id
                        .. " GROUP BY user_id"
-                       .. " WHERE game_id = " .. game_id
-                       .. " GROUP BY user_id"
 
     local sql = "SELECT a.game_id, a.user_id, u.nickname, b.stake_available as stake_ended, "
                 .. " a.stake_bought as total_buying, "
@@ -409,7 +407,7 @@ function DataAction:showgamedataAction(args)
     result.data.blind_amount = blind_amount
     result.data.duration = duration
     
-    sql = "SELECT SUM(benefits) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id
+    sql = "SELECT COALESCE(SUM(benefits), 0) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id
 
     cc.printdebug("executing sql: %s", sql)
 
@@ -419,9 +417,15 @@ function DataAction:showgamedataAction(args)
         result.data.msg = "数据库错误: " .. err
         return result
     end
-    result.data.insurance_benefits = 0 - dbres[1].total_ins_benefits
-    
-    sql = "SELECT user_id AS uid, SUM(benefits) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id .." GROUP BY user_id"
+    local inspect = require("inspect")
+    cc.printdebug("dbres: %s", inspect(dbres))
+    if dbres[1].total_ins_benefits ~= nil then
+        result.data.insurance_benefits = 0 - dbres[1].total_ins_benefits
+    else
+        result.data.insurance_benefits = 0
+    end
+
+    sql = "SELECT user_id AS uid, COALESCE(SUM(benefits), 0) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id .." GROUP BY user_id"
     
     cc.printdebug("executing sql: %s", sql)
 
@@ -432,9 +436,9 @@ function DataAction:showgamedataAction(args)
         return result
     end
 
-    for i = 1,#result.data.player_data do
-        for j = 1,#dbres do 
-            if result.data.player_data[i].user_id == dbres[j].uid then begin
+    for i = 1,table.getn(result.data.player_data) do
+        for j = 1,table.getn(dbres) do 
+            if result.data.player_data[i].user_id == dbres[j].uid then
                 result.data.player_data[i].total_ins_benefits = dbres[j].total_ins_benefits
             else
                 result.data.player_data[i].total_ins_benefits = 0
