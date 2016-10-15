@@ -270,7 +270,7 @@ function SocialAction:addfriendAction(args)
     message.data.phone = instance:getPhone()
     message.data.nickname = instance:getNickname()
     message.data.notes = notes
-    online:sendMessage(target_id, json.encode(message))
+    online:sendMessage(target_id, json.encode(message), Constants.MessageType.Personal_FriendRequest)
 
     return result
 end
@@ -311,7 +311,7 @@ function SocialAction:sendprivatemessageAction(args)
     message.data.nickname = instance:getNickname()
     message.data.content = content
     message.data.content_type = content_type
-    online:sendMessage(target_id, json.encode(message))
+    online:sendMessage(target_id, json.encode(message), Constants.MessageType.Personal_PrivateMessage)
 
     result.data.state = 0
 	result.data.content_type = content_type
@@ -421,7 +421,7 @@ function SocialAction:handlefriendrequestAction(args)
     message.data.nickname = instance:getNickname()
     message.data.notes = "user " .. message.data.nickname .. " handled your friend request"
     message.data.status = status
-    online:sendMessage(from_user, json.encode(message))
+    online:sendMessage(from_user, json.encode(message), Constants.MessageType.Personal_FriendHandled)
      
     result.data.state = 0
     result.data.from_user = from_user
@@ -508,7 +508,7 @@ function SocialAction:handlerebuyrequestAction(args)
     message.data.stake_bought = stake_bought
     message.data.notes = "user " .. message.data.nickname .. " handled your rebuy request"
     message.data.status = status
-    online:sendMessage(from_user, json.encode(message))
+    online:sendMessage(from_user, json.encode(message), Constants.MessageType.Game_RebuyHandled)
      
     result.data.state = 0
     result.data.from_user = from_user
@@ -668,7 +668,7 @@ function SocialAction:invitegameAction(args)
     message.data.game_name = game_name
     message.data.game_mode = game_mode
     message.data.notes = "user " .. message.data.sender_nickname .. " invited you to join game " .. message.data.game_name
-    online:sendMessage(user_id, json.encode(message))
+    online:sendMessage(user_id, json.encode(message), Constants.MessageType.Club_JoinGameApply)
 
     result.data.state = 0
     result.data.game_id = game_id

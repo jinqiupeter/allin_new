@@ -280,6 +280,7 @@ _handleTable = function (snap_value, args)
     local game_id = args.game_id
     local table_id = args.table_id
     local instance = args.instance
+    local mysql = args.mysql
     local redis = args.redis
     local self = args.self
 
@@ -363,7 +364,8 @@ _handleTable = function (snap_value, args)
         local rebuy_stake           = tmp[5]
         local bet_amount            = tmp[6] -- bet amount
         local last_action           = tmp[7] -- 0: None, 1: ResetAction, 2: Check, 3: Fold, 4: Call, 5: Bet, 6: Raise, 7: Allin, 8: Show, 9: Muck, 10: Sitout, 11: Back
-        local hole_cards            = tmp[8] or ""
+        local hole_cards_str            = tmp[8] or ""
+        local hole_cards = table.concat(string_split(hole_cards_str, "_"), " ")
 
         if (seat_no == value.dealer) then
             local game_runtime = Game_Runtime:new(instance, redis)
@@ -377,6 +379,28 @@ _handleTable = function (snap_value, args)
         i = i + 1
     end
     value.occupied_seats = occupied_seats
+
+    -- update game_holecards.hole_cards_to_show
+    if tonumber(value.table_state) == Constants.Snap.TableState.EndRound then
+        for i= 1, table.getn(occupied_seats) do
+            local seat_holecards = occupied_seats[i].hole_cards
+            local seat_player_id = occupied_seats[i].player_id
+            local sql = "UPDATE game_holecards SET hole_cards_to_show = " .. instance:sqlQuote(seat_holecards)
+                     .. " WHERE game_id = " .. game_id
+                     .. " AND table_id = " .. table_id
+                     .. " AND hand_id = " .. self:_getHand(instance, redis, game_id, table_id)
+                     .. " AND user_id = " .. seat_player_id
+
+            cc.printdebug("executing sql: %s", sql)
+            local dbres, err, errno, sqlstate = mysql:query(sql)
+            if not dbres then
+                cc.printdebug("db err: %s", err)
+                value.state = Constants.Error.MysqlError
+                value.msg = "数据库错误: " .. err
+                return value
+            end
+        end
+    end
 
     -- only dealer should update buying.stake_available table at the end of current hand
     if tonumber(value.table_state) == Constants.Snap.TableState.EndRound

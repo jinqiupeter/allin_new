@@ -1265,7 +1265,7 @@ function GameAction:rebuyAction(args)
             message.data.game_name = game_name
             message.data.club_name = club_name
             message.data.amount = amount
-            online:sendMessage(owner_id, json.encode(message))
+            online:sendMessage(owner_id, json.encode(message), Constants.MessageType.Game_RebuyApplied)
 
             result.data.state = 0
             result.data.msg = "Rebuy application sent"
