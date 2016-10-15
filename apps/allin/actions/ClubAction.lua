@@ -376,7 +376,7 @@ function ClubAction:joinclubAction(args)
     message.data.club_id = club_id
     message.data.club_name = club_name
     message.data.notes = notes
-    online:sendMessage(owner_id, json.encode(message))
+    online:sendMessage(owner_id, json.encode(message), Constants.MessageType.Club_NewMemberApply)
 
     return result
 end
@@ -526,7 +526,7 @@ function ClubAction:handleapplicationAction(args)
     message.data.club_name = club_name
     message.data.notes = "user " .. instance:getNickname() .. " handled your club request for club " .. message.data.club_name
     message.data.status = status
-    online:sendMessage(user_id, json.encode(message))
+    online:sendMessage(user_id, json.encode(message), Constants.MessageType.Club_NewMemberHandled)
 
     result.data.state = 0
     result.data.msg = "application handled"

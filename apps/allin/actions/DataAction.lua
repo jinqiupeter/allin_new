@@ -593,7 +593,7 @@ function DataAction:showprevioushandAction(args)
     end
 
 
-    local sql = "SELECT d.hole_cards, c.nickname, a.user_id, a.stake_change FROM "
+    local sql = "SELECT CASE WHEN d.user_id = " .. instance:getCid() .. " THEN d.hole_cards ELSE d.hole_cards_to_show END AS hole_cards, c.nickname, a.user_id, a.stake_change FROM "
     .. " game_stake a, user c, game_holecards d WHERE "
     .. " a.game_id = " .. game_id .. " AND a.table_id = " .. table_id .. " AND a.hand_id = " .. hand_id
     .. " AND c.id = a.user_id "

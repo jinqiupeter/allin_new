@@ -134,11 +134,13 @@ _M.MessageType = {
     Club_JoinGameApply              = 6,
     Club_JoinGameHandled            = 7,
     
-    Personal_OfflineMessage         = 8,
+    Personal_PrivateMessage         = 8,
     Personal_FriendRequest          = 9,
     Personal_FriendHandled          = 10,
 
     System_Broadcase                = 11,
+    Game_RebuyApplied               = 12,
+    Game_RebuyHandled               = 13,
 }
 
 _M.ErrorMsg = {
