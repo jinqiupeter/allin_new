@@ -366,9 +366,12 @@ function DataAction:showgamedataAction(args)
     local sub_query = " SELECT game_id, user_id, bought_at, MAX(updated_at) as updated_at, sum(stake_bought) as stake_bought FROM buying"
                        .. " WHERE game_id = " .. game_id
                        .. " GROUP BY user_id"
+                       .. " WHERE game_id = " .. game_id
+                       .. " GROUP BY user_id"
+
     local sql = "SELECT a.game_id, a.user_id, u.nickname, b.stake_available as stake_ended, "
                 .. " a.stake_bought as total_buying, "
-                .. " (b.stake_available - a.stake_bought) AS result"
+                .. " (b.stake_available - a.stake_bought) AS result "
                 .. " FROM user u , "
                 .. "(" .. sub_query .. ")  a,"
                 .. " buying b "
@@ -388,6 +391,7 @@ function DataAction:showgamedataAction(args)
         return result
     end
 
+
     result.data.player_data = dbres
     result.data.players_found = #dbres
     result.data.state = 0
@@ -404,6 +408,40 @@ function DataAction:showgamedataAction(args)
     result.data.started_at = started_at
     result.data.blind_amount = blind_amount
     result.data.duration = duration
+    
+    sql = "SELECT SUM(benefits) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id
+
+    cc.printdebug("executing sql: %s", sql)
+
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    result.data.insurance_benefits = 0 - dbres[1].total_ins_benefits
+    
+    sql = "SELECT user_id AS uid, SUM(benefits) AS total_ins_benefits FROM insurance_benefits WHERE game_id = ".. game_id .." GROUP BY user_id"
+    
+    cc.printdebug("executing sql: %s", sql)
+
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    for i = 1,#result.data.player_data do
+        for j = 1,#dbres do 
+            if result.data.player_data[i].user_id == dbres[j].uid then begin
+                result.data.player_data[i].total_ins_benefits = dbres[j].total_ins_benefits
+            else
+                result.data.player_data[i].total_ins_benefits = 0
+            end
+        end
+    end
+
     if tonumber(game_state) == Constants.GameState.GameStateEnded then
         local sql = " SELECT MAX(updated_at) - FROM_UNIXTIME(" .. tonumber(started_at) .. ") as time_elapsed FROM buying"
                        .. " WHERE game_id = " .. game_id

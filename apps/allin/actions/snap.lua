@@ -775,6 +775,7 @@ _handleWantToStraddleNextRound = function (snap_value, args)
     local table_id = args.table_id
     local self = args.self
     local value = {}
+    value.round = snap_value[1]
     return value
 end
 
