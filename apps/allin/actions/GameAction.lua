@@ -135,6 +135,17 @@ _handleGAMELIST = function (parts, args)
         cc.printdebug("player count for %s: %s", found_id, player_count)
         result.data.games[index].player_count = player_count
 
+        -- if player has played the game
+        local sql = "SELECT COUNT(*) AS count FROM user_game_history "
+            .. " WHERE game_id = " .. found_id 
+            .. " AND user_id = " .. instance:getCid()
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.throw("db err: %s", err)
+        end
+        result.data.games[index].played = dbres[1].count
+
         index = index + 1
     end
 
@@ -966,7 +977,10 @@ function GameAction:joingameAction(args)
 
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = "SELECT * FROM game WHERE id = " .. game_id 
+    local sql = "SELECT a.*, b.name as club_name, c.rebuy_control FROM game a, club b, game_extra c " 
+            .. " WHERE a.id = " .. game_id 
+            .. " AND a.club_id = b.id"
+            .. " AND c.game_id = a.id"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -980,6 +994,7 @@ function GameAction:joingameAction(args)
         return result
     end
     local game = dbres[1]
+    local owner_id = game.owner_id
     local user_clubs = instance:getClubIds(instance:getMysql())
     if not table.contains(user_clubs, tonumber(game.club_id)) then
         result.data.state = Constants.Error.PermissionDenied
@@ -990,32 +1005,56 @@ function GameAction:joingameAction(args)
     self._currentAction = args.action
     self._msgid = msgid
 
-    -- check password
-    if game.password ~= "" and password ~= game.password then
-        result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = Constants.ErrorMsg.WrongPassword
+    local sql = "SELECT COUNT(*) AS count FROM user_game_history "
+            .. " WHERE game_id = " .. game_id 
+            .. " AND user_id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
         return result
     end
+    local played = tonumber(dbres[1].count)
 
     -- stake left must be larger than current blind amount, which is created in game.creategame and updated in snap.TableSnap
     local redis = instance:getRedis()
     local game_runtime = Game_Runtime:new(instance, redis)
-    local blind_amount = game_runtime:getGameInfo(game_id, "BlindAmount") or 0
-        
-    -- buy required stake
-    local required_stake  = game.buying_stake
-    local res = Helper:buyStake(instance, required_stake, {
-                                                game_id = game_id,
-                                                ignore_stake_left = false,
-                                                blinds_start = blind_amount,
-                                                gold_needed = game.buying_gold
-                                                })
-    if res.status ~= 0 then
-        result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
-        return result
+    local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount")) or 0
+
+    local player_stake = 0
+    if played == 0 then
+        -- check password
+        if game.password ~= "" and password ~= game.password then
+            result.data.state = Constants.Error.PermissionDenied
+            result.data.msg = Constants.ErrorMsg.WrongPassword
+            return result
+        else 
+            local required_stake  = game.buying_stake
+            local res = Helper:buyStake(instance, required_stake, {
+                                        game_id = game_id,
+                                        ignore_stake_left = false,
+                                        blinds_start = blind_amount,
+                                        gold_needed = game.buying_gold
+                                        })
+            if res.status ~= 0 then
+                result.data.state = Constants.Error.PermissionDenied
+                result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
+                return result
+            end
+            player_stake = res.stake_bought
+        end
+    else 
+    -- player has played the game
+        if tonumber(game.game_mode) == Constants.GameMode.GameModeRingGame then
+            local stake_left = Helper:getStakeLeft(instance, {game_id = game_id})
+            player_stake = stake_left
+        else 
+            result.data.state = Constants.Error.PermissionDenied
+            result.data.msg = "You are already registered"
+            return result
+        end
     end
-    local player_stake = res.stake_bought
 
     local message = msgid .. " REGISTER " .. game_id .. " " .. player_stake .. "\n";
     cc.printdebug("sending message to allin server: %s", message)

@@ -25,6 +25,29 @@ function Helper:getSystemConfig(instance, config_name)
     return dbres[1].value;
 end
 
+function Helper:getStakeLeft(instance, args)
+    local mysql = instance:getMysql()
+    local game_id = args.game_id    
+
+    local stake_left = 0
+
+    local sql = "SELECT stake_available FROM buying WHERE "
+         .. " game_id = " .. game_id 
+         .. " AND user_id = " .. instance:getCid()
+         .. " ORDER BY bought_at DESC LIMIT 1"
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        cc.printdebug("db err: %s", err)
+        return 0
+    end
+    if #dbres ~= 0 then
+        stake_left = tonumber(dbres[1].stake_available)
+    end
+
+    return stake_left
+end
+
 function Helper:buyStake(instance, required_stake, args)
     local required_stake = tonumber(required_stake)
     local mysql = instance:getMysql()
@@ -43,10 +66,7 @@ function Helper:buyStake(instance, required_stake, args)
         cc.printdebug("db err: %s", err)
         return {status = 1, stake_bought = 0, err = "db err: " .. err}
     end
-    local stake_left = 0
-    if #dbres ~= 0 then
-        stake_left = dbres[1].stake_available
-    end
+    local stake_left = self:getStakeLeft(instance, {game_id = game_id})
     if not ignore_stake_left then
         -- user has already joined the game, take stake left
         cc.printdebug("stake_left: %s, blinds_start: %s", stake_left, blinds_start)
