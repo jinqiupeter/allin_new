@@ -1168,6 +1168,8 @@ function GameAction:buyinsuranceAction(args)
     if bet_round == nil or (tonumber(bet_round) ~= Constants.Snap.BetRound.Flop and tonumber(bet_round) ~= Constants.Snap.BetRound.Turn) then
         result.data.msg = Constants.ErrorMsg.CannotBuyInsurance..bet_round
         result.data.state = Constants.Error.LogicError
+        
+        cc.printdebug("buyinsuranceAction betround error :"..bet_round)
         return result
     end
 

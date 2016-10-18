@@ -811,7 +811,12 @@ _handleBuyInsurance = function (snap_value, args)
     local value = {}
     value.max_payment = snap_value[1]
     value.outs = string_split(snap_value[2], ":")
-    value.outs_divided = string_split(snap_value[3], ":")
+    if (snap_value[3] ~= "0") then
+        value.outs_divided = string_split(snap_value[3], ":")
+    else
+        value.outs_divided = {}
+    end
+
     value.opponent = {}
     
     local opponent = string_split(snap_value[4], "-")

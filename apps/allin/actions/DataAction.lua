@@ -665,7 +665,25 @@ function DataAction:showprevioushandAction(args)
         return result
     end
     result.data.cc_cards = dbres
-    
+
+    local sql = "SELECT COALESCE(SUM(benefits), 0) AS total_ins_benefits, user_id AS uid FROM insurance_benefits WHERE game_id = ".. game_id .. " AND table_id = ".. table_id .. " AND hand_id = " .. hand_id
+
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+
+    for i = 1,table.getn(result.data.player_data) do
+        for j = 1, table.getn(dbres) do
+            if (dbres[j].uid ~= nil and dbres[j].uid == result.data.player_data[i].user_id) then
+                result.data.player_data[i].total_ins_benefits = dbres[j].total_ins_benefits
+            end
+        end
+    end
+
     result.data.state = 0
     result.data.game_id = game_id
     result.data.table_id = table_id
