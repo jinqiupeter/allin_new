@@ -169,6 +169,7 @@ _M.ErrorMsg = {
     YouAreNotAdmin                  = "您不是该俱乐部的管理员，无法进行此次操作！",
     YouAreNotOwner                  = "您不是该俱乐部的创建者，无法进行此次操作！",
     FundsNotEnough                  = "俱乐部剩余基金（%s）不足，请联系俱乐部创建人充值基金后操作！",
+    StakeLeftNotEnough              = "您的剩余筹码(%s)小于当前牌局大盲(%s)，请Rebuy!",
 }
 
 return table.readonly(_M)
