@@ -236,6 +236,7 @@ function ClubAction:listclubAction(args)
     local sql = "SELECT c.id, name, owner_id, area, description, u.nickname as owner_name" 
                 .. " FROM club c, user u WHERE c.owner_id = u.id"
                 .. " AND c.id NOT IN (SELECT club_id FROM user_club WHERE user_id = " .. instance:getCid() .. " AND deleted = 0) "
+                .. " AND c.deleted = 0"
                 .. " AND (c.name LIKE " .. instance:sqlQuote(word) 
                 .. " OR c.area LIKE " .. instance:sqlQuote(word) 
                 .. " OR c.description LIKE " .. instance:sqlQuote(word) .. ")"
