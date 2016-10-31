@@ -331,7 +331,8 @@ _handleTable = function (snap_value, args)
 
 
         value.current_player    = tmp[4]
-        value.last_bet_player   = tmp[5]
+        value.current_player_time_left    = tmp[5]
+        value.last_bet_player   = tmp[6]
     end
 
     local head = table.remove(snap_value, 1)
@@ -500,6 +501,7 @@ _handleCards = function (snap_value, args)
                     .. self:_getHand(instance, redis, game_id, table_id) .. ", "
                     .. instance:getCid() .. ", "
                     .. instance:sqlQuote(table.concat(value.cards, " ")) .. ") "
+                    .. " ON DUPLICATE KEY UPDATE hole_cards = " .. instance:sqlQuote(table.concat(value.cards, " "))
 
     local sql = nil
     if tonumber(card_type) == Constants.Snap.CardType.SnapCardsHole then
@@ -908,6 +910,8 @@ function Snap:handleSNAP(parts, args)
     args.table_id = result.data.table_id
     args.self = self
     result.data.snap_value = self.snapHandler[tonumber(snap_type)](table.subrange(parts, 4, #parts), args)
+    
+    local inspect = require("inspect")
 
     return result
 end
