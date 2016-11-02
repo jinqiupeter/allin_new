@@ -233,7 +233,7 @@ _handleGAMEINFO = function (parts, args)
     result.data.blinds_time         = info[3]
     result.data.ante                = info[4]
     result.data.mandatory_straddle  = info[5]
-
+    result.data.insurance           = info[6];
     result.data.name                = table.concat(table.subrange(parts, 5, #parts), " ")
 
     -- get extra game info
@@ -814,7 +814,7 @@ function GameAction:creategameAction(args)
     end
 
     -- create record in table game_extra
-    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, rebuy_control, max_rebuy, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, mandatory_straddle, winner_pool_max, deny_register_after) "
+    local sql = "INSERT INTO game_extra (game_id, game_mode, duration, rebuy_control, max_rebuy, blind_factor, blind_time, start_at, allow_rebuy, allow_rebuy_times, allow_rebuy_before_level, ante, mandatory_straddle, insurance, winner_pool_max, deny_register_after) "
                       .. " VALUES (" .. game_id .. ", "
                                ..  game_mode .. ", "
                                ..  (extra.duration or 0) .. ", "
@@ -828,6 +828,7 @@ function GameAction:creategameAction(args)
                                ..  (extra.allow_rebuy_before_level or 0) .. ", "
                                ..  (extra.ante or 0) .. ", "
                                ..  (extra.mandatory_straddle or 0) .. ", "
+                               ..  (extra.insurance or 0) .. ", "
                                ..  (extra.winner_pool_max or 0) .. ", "
                                ..  (extra.deny_register_after or 0) .. ") "
     cc.printdebug("executing sql: %s", sql)
@@ -1171,7 +1172,8 @@ function GameAction:buyinsuranceAction(args)
         return result
     end
 
-        local instance = self:getInstance()
+    cc.printinfo("buyinsuranceAction")
+    local instance = self:getInstance()
     local mysql = instance:getMysql()
     local redis = instance:getRedis()
     local game_runtime = Game_Runtime:new(instance, redis)

@@ -666,7 +666,7 @@ function DataAction:showprevioushandAction(args)
     end
     result.data.cc_cards = dbres
 
-    local sql = "SELECT COALESCE(SUM(benefits), 0) AS total_ins_benefits, user_id AS uid FROM insurance_benefits WHERE game_id = ".. game_id .. " AND table_id = ".. table_id .. " AND hand_id = " .. hand_id
+    local sql = "SELECT COALESCE(SUM(benefits), 0) AS total_ins_benefits, user_id AS uid FROM insurance_benefits WHERE game_id = ".. game_id .. " AND table_id = ".. table_id .. " AND hand_id = " .. hand_id .. " GROUP BY user_id"
 
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
