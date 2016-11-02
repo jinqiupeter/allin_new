@@ -255,6 +255,7 @@ function DataAction:listallclubgamesAction(args)
     .. " FROM club c, user_club uc, (" .. sub_query .. ") b, game g"
     .. " WHERE uc.user_id = " .. instance:getCid()
     .. " AND uc.club_id = c.id "
+    .. " AND c.deleted = 0 "
     .. " AND b.user_id = uc.user_id "
     .. " AND b.game_id = g.id "
     .. " AND uc.club_id = g.club_id "

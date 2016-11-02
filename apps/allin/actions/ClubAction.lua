@@ -137,6 +137,7 @@ function ClubAction:listjoinedclubAction(args)
                 .. " SUM(b.user_id=" .. instance:getCid() .. " AND b.is_admin=1) AS is_admin, "
                 .. " u.nickname AS owner_name FROM club a, user_club b, user u "
                 .. " WHERE b.deleted = 0 AND "
+                .. " a.deleted = 0 AND"
                 .. " a.id = b.club_id AND "
                 .. " u.id = a.owner_id AND"
                 .. " b.club_id in (" .. condition .. " ) group by b.club_id "
@@ -1159,4 +1160,66 @@ function ClubAction:updatesettingAction(args)
 
     return result
 end
+
+function ClubAction:announceAction(args)
+    local data = args.data
+    local club_id = tonumber(data.club_id)
+    local announcement = data.announcement
+    local result = {state_type = "action_state", data = {
+        action = args.action}
+    }
+
+    if not club_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not announcement then
+        result.data.msg = "announcement not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+
+    local instance = self:getInstance()
+    local mysql = instance:getMysql()
+
+    local sql = "SELECT id, owner_id, name FROM club WHERE id =" .. club_id 
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+     
+    if #dbres == 0 then
+        result.data.state = Constants.Error.NotExist
+        result.data.msg = "club with club_id ".. club_id .. " not found"
+        return result
+    end
+    local club_name = dbres[1].name
+
+    -- check if i am admin
+    local isadmin = Helper:isClubAdmin(instance, {club_id = club_id})
+    if not isadmin then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.YouAreNotAdmin
+        return result
+    end
+
+    -- send to club owner for approval
+    local online = instance:getOnline()
+    local message = {state_type = "server_push", data = {push_type = "club.announcement"}}
+    message.data.club_id = club_id
+    message.data.club_name = club_name
+    message.data.announcement = announcement
+    online:sendClubMessage(club_id, json.encode(message), Constants.MessageType.Club_Annoucement)
+
+    result.data.state = 0
+    result.data.msg = "announcement sent"
+    result.data.announcement = announcement
+
+    return result
+end
+
 return ClubAction
