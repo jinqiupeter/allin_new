@@ -697,9 +697,14 @@ function SocialAction:listunreadmessageAction(args)
     local sql = "SELECT SQL_CALC_FOUND_ROWS id as message_id, type, from_id, to_id, sent_at,  content "
                 .. " FROM message"
                 .. " WHERE is_read = 0 "
-                .. " AND (to_id =  " .. instance:getCid()
-                .. " OR (to_id = 0  AND from_id in " .. club_id_condition .. ")"
-                .. " OR to_id = -1)"
+                .. " AND ( "
+                    .. " to_id =  " .. instance:getCid() 
+                    .. " OR (to_id = 0  AND from_id in " .. club_id_condition .. ")" -- club message
+                    .. " OR to_id = -1 " -- system broadcase message
+                .. ")"  
+                .. " AND id NOT IN (" 
+                    .. " SELECT message_id AS id FROM message_read WHERE user_id = " .. instance:getCid()
+                .. ")"
                 .. " ORDER BY sent_at DESC"
                 .. " LIMIT " .. offset .. ", " .. limit
     cc.printdebug("executing sql: %s", sql)
@@ -753,8 +758,9 @@ function SocialAction:markasreadAction(args)
         
     local instance = self:getInstance()
     local mysql = instance:getMysql()
-    local sql = " UPDATE message SET is_read = " .. is_read
-                .. " WHERE id = " .. message_id
+    local sql = " INSERT INTO message_read (message_id, user_id) VALUES ("
+                .. message_id .. ","
+                .. instance:getCid() .. ")"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then

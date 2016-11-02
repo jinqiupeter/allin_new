@@ -58,7 +58,8 @@ _M.Snap = {
         SnapCardsHole       = 0x1,
         SnapCardsFlop       = 0x2,
         SnapCardsTurn       = 0x3,
-        SnapCardsRiver      = 0x4
+        SnapCardsRiver      = 0x4,
+        SnapCardsCommunity  = 0x5,
     },
 
     PlayerAction = {
