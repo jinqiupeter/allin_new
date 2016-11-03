@@ -101,11 +101,12 @@ _handleGAMELIST = function (parts, args)
         club_id_condition  = "(" .. table.concat(instance:getClubIds(mysql), ", ") .. ")"
     end
 
-    local sql = "SELECT g.id, CASE WHEN g.password != '' THEN 1 ELSE 0 END AS password_protected, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, game_mode, u.nickname "
-                .. " FROM game g, club c, user u"
+    local sql = "SELECT g.id, CASE WHEN g.password != '' THEN 1 ELSE 0 END AS password_protected, club_id, g.name, g.owner_id, g.max_players, g.created_at, c.name as club_name, blinds_start, g.game_mode, u.nickname, ge.rebuy_control "
+                .. " FROM game g, club c, user u, game_extra ge"
                 .. " WHERE g.deleted != 1 "
                 .. " AND g.id IN " .. game_id_condition 
                 .. " AND g.club_id = c.id " 
+                .. " AND g.id = ge.game_id "
                 .. " AND g.owner_id = u.id"
                 .. " AND g.club_id IN " .. club_id_condition
                 .. " GROUP BY g.id"
@@ -163,6 +164,8 @@ _handleGAMEINFO = function (parts, args)
         table.remove(parts, 1)
     end
 
+
+    cc.printdebug("inside _handleGAMEINFO")
     local result = {__id = msgid, state_type = "action_state", data = {
         action = args.action, state = Constants.OK}
     }
@@ -996,6 +999,7 @@ function GameAction:joingameAction(args)
     end
     local game = dbres[1]
     local owner_id = game.owner_id
+    local rebuy_control = game.rebuy_control
     local user_clubs = instance:getClubIds(instance:getMysql())
     if not table.contains(user_clubs, tonumber(game.club_id)) then
         result.data.state = Constants.Error.PermissionDenied
@@ -1023,6 +1027,8 @@ function GameAction:joingameAction(args)
     local game_runtime = Game_Runtime:new(instance, redis)
     local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount")) or 0
 
+    -- see http://naotu.baidu.com/file/efe2380645f427be63f927153959615f?token=a6d098a082ef1cd1
+    -- for rebuy_control, password and rejoin
     local player_stake = 0
     if played == 0 then
         -- check password
@@ -1030,7 +1036,7 @@ function GameAction:joingameAction(args)
             result.data.state = Constants.Error.PermissionDenied
             result.data.msg = Constants.ErrorMsg.WrongPassword
             return result
-        else 
+        elseif rebuy_control == 0 and game.password == "" then
             local required_stake  = game.buying_stake
             local res = Helper:buyStake(instance, required_stake, {
                                         game_id = game_id,

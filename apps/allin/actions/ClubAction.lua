@@ -43,6 +43,23 @@ function ClubAction:createclubAction(args)
     local instance = self:getInstance()
     local mysql = instance:getMysql()
 
+    -- check max. club limit
+    local sql = " SELECT count(*) AS count FROM club WHERE deleted = 0 AND owner_id = " .. instance:getCid()
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local club_count = tonumber(dbres[1].count)
+    local club_limit = tonumber(Helper:getSystemConfig(instance, "max_club_per_user"))
+    if club_count >= club_limit then 
+        result.data.msg = string_format(Constants.ErrorMsg.MaxClubExceeded, club_count, club_limit)
+        result.data.state = Constants.Error.PermissionDenied
+        return result
+    end
+
     -- get next auto increment id
     local club_id, err = instance:getNextId("club")
     if not club_id then
@@ -56,7 +73,7 @@ function ClubAction:createclubAction(args)
                       .. " VALUES (" .. instance:sqlQuote(name) .. ", "
                                .. instance:sqlQuote(area) .. ", "
                                ..  instance:sqlQuote(description) .. ", "
-                               .. "(SELECT id FROM user WHERE session = " .. instance:sqlQuote(self:getInstance():getAllinSession()) .. "));"
+                               .. instance:getCid() .. ")"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then

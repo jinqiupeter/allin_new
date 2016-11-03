@@ -166,6 +166,7 @@ _M.ErrorMsg = {
     CannotBuyInsurance              = "当前阶段不允许购买保险",
     MaxAdminExceeded                = "管理员人数（%s）已达到当前俱乐部级别（%s）的最大管理员人数限制，请升级俱乐部!",
     MaxMembersExceeded              = "俱乐部人数（%s）已达到当前俱乐部级别（%s）的最大人数限制，请升级俱乐部!",
+    MaxClubExceeded                 = "您当前创建的俱乐部个数（%s）已经达到最大限制（%s）!",
     CurrentMembersMoreThanTarget    = "当前俱乐部人数（%s）大于目标级别（%s）允许的最大人数（%s），请删除部分成员后重试",
     YouAreNotAdmin                  = "您不是该俱乐部的管理员，无法进行此次操作！",
     YouAreNotOwner                  = "您不是该俱乐部的创建者，无法进行此次操作！",
