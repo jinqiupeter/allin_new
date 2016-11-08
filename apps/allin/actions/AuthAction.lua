@@ -83,7 +83,6 @@ function AuthAction:signupAction(args)
         return result
     end
 
-    --[[
     if not smscode then
         result.data.state = Constants.Error.ArgumentNotSet
         result.data.msg = "短信验证码未填写"
@@ -106,7 +105,6 @@ function AuthAction:signupAction(args)
         result.data.msg = body.error
         return result
     end
-    --]]
 
     local sql = "insert into user (phone, password, nickname, gold) "
                  .. " values (" .. instance:sqlQuote(phone) .. ", "

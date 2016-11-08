@@ -623,7 +623,7 @@ function ClubAction:disbandclubAction(args)
     local owner_id = dbres[1].owner_id
     if owner_id ~= instance:getCid() then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "you are not owner of club " .. club_id .. ". Only the club owner can disband the club"
+        result.data.msg = Constants.ErrorMsg.YouAreNotOwner
         return result
     end
 
@@ -691,7 +691,7 @@ function ClubAction:addfundsAction(args)
     local owner_id = dbres[1].owner_id
     if owner_id ~= instance:getCid() then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "you are not owner of club " .. club_id .. ". Only the club owner can add gold to club funds"
+        result.data.msg = Constants.ErrorMsg.YouAreNotOwner
         return result
     end
     local gold_available = tonumber(dbres[1].gold)
@@ -773,7 +773,7 @@ function ClubAction:changeadminAction(args)
     local owner_id = dbres[1].owner_id
     if owner_id ~= instance:getCid() then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "you are not owner of club " .. club_id .. ". Only the club owner can grant or revoke admin"
+        result.data.msg = Constants.ErrorMsg.YouAreNotOwner
         return result
     end
 
