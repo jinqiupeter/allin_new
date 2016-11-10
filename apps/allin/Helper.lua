@@ -29,11 +29,12 @@ function Helper:getStakeLeft(instance, args)
     local mysql = instance:getMysql()
     local game_id = args.game_id    
 
+    local player_id = args.for_player or instance:getCid()
     local stake_left = 0
 
     local sql = "SELECT stake_available FROM buying WHERE "
          .. " game_id = " .. game_id 
-         .. " AND user_id = " .. instance:getCid()
+         .. " AND user_id = " .. player_id
          .. " ORDER BY bought_at DESC LIMIT 1"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -54,11 +55,15 @@ function Helper:buyStake(instance, required_stake, args)
     local game_id = args.game_id    
     local blinds_start = args.blinds_start
     local gold_needed = args.gold_needed
+    if required_stake == 0 then 
+        gold_needed = 0
+    end
+    local player_id = args.for_player or instance:getCid()
     local ignore_stake_left = args.ignore_stake_left
 
     local sql = "SELECT stake_available FROM buying WHERE "
          .. " game_id = " .. game_id 
-         .. " AND user_id = " .. instance:getCid()
+         .. " AND user_id = " .. player_id
          .. " ORDER BY bought_at DESC LIMIT 1"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -66,7 +71,7 @@ function Helper:buyStake(instance, required_stake, args)
         cc.printdebug("db err: %s", err)
         return {status = 1, stake_bought = 0, err = "db err: " .. err}
     end
-    local stake_left = self:getStakeLeft(instance, {game_id = game_id})
+    local stake_left = self:getStakeLeft(instance, {game_id = game_id, for_player = player_id})
     if not ignore_stake_left then
         -- user has already joined the game, take stake left
         cc.printdebug("stake_left: %s, blinds_start: %s", stake_left, blinds_start)
@@ -76,7 +81,7 @@ function Helper:buyStake(instance, required_stake, args)
         end
     end
 
-    local sql = "SELECT gold FROM user where id = " .. instance:getCid() 
+    local sql = "SELECT gold FROM user where id = " .. player_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -95,7 +100,7 @@ function Helper:buyStake(instance, required_stake, args)
         return {status = 1, stake_bought = 0, err = "err: " .. err_mes}
     end
 
-    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. instance:getCid()
+    sql = "UPDATE user SET gold = " .. gold_available - gold_to_charge .. " WHERE id = " .. player_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -105,7 +110,7 @@ function Helper:buyStake(instance, required_stake, args)
     
     -- create record in buying
     sql = "INSERT INTO buying (user_id, game_id, gold_spent, stake_bought, stake_available ) "
-          .. " VALUES ( " .. instance:getCid() .. ", "
+          .. " VALUES ( " .. player_id .. ", "
           .. game_id .. ", "
           .. gold_needed .. ", "
           .. required_stake .. ", "
@@ -261,11 +266,13 @@ end
 
 function Helper:rebuy(instance, redis, required_stake, args)
     local game_id = args.game_id
+    local player_id = args.for_player or instance:getCid()
     local res = self:buyStake(instance, required_stake, {
                                                 game_id = args.game_id,
                                                 ignore_stake_left = args.ignore_stake_left,
                                                 blinds_start = args.blind_amount,
-                                                gold_needed = args.gold_needed
+                                                gold_needed = args.gold_needed,
+                                                for_player = player_id
                                                 })
     if res.status ~= 0 then
         return {status = Constants.Error.PermissionDenied, err = res.err}
@@ -273,7 +280,6 @@ function Helper:rebuy(instance, redis, required_stake, args)
     local rebuy_stake = res.stake_bought
 
     local msgid = args.msgid or 0
-    local player_id = args.for_player or instance:getCid()
     local message = msgid .. " REBUY " .. game_id .. " " .. rebuy_stake .. " " .. player_id .."\n";
     cc.printdebug("sending message to allin server: %s", message)
     local allin = instance:getAllin()

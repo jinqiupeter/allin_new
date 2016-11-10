@@ -781,21 +781,6 @@ function GameAction:creategameAction(args)
         return result
     end
 
-    -- buy stake 
-    local required_stake  = buying_stake
-    local res = Helper:buyStake(instance, required_stake, {
-                                                game_id = game_id,
-                                                ignore_stake_left = true,
-                                                blinds_start = blinds_start,
-                                                gold_needed = buying_gold
-                                                })
-    if res.status ~= 0 then
-        result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
-        return result
-    end
-
-
     -- create record in table game
     local sql = "INSERT INTO game (max_players, timeout, blinds_start, password, name,  owner_id, club_id, game_mode, buying_gold, buying_stake) "
                       .. " VALUES (" .. max_players .. ", "
@@ -1037,19 +1022,7 @@ function GameAction:joingameAction(args)
             result.data.msg = Constants.ErrorMsg.WrongPassword
             return result
         elseif rebuy_control == 0 and game.password == "" then
-            local required_stake  = game.buying_stake
-            local res = Helper:buyStake(instance, required_stake, {
-                                        game_id = game_id,
-                                        ignore_stake_left = false,
-                                        blinds_start = blind_amount,
-                                        gold_needed = game.buying_gold
-                                        })
-            if res.status ~= 0 then
-                result.data.state = Constants.Error.PermissionDenied
-                result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
-                return result
-            end
-            player_stake = res.stake_bought
+            player_stake  = game.buying_stake
         end
     else 
     -- player has played the game
@@ -1061,6 +1034,21 @@ function GameAction:joingameAction(args)
             result.data.msg = "You are already registered"
             return result
         end
+    end
+
+    -- always buy stake when user join's the game, even when player_stake is 0
+    -- , so user's buying history can be found in buying table
+    local required_stake  = player_stake
+    local res = Helper:buyStake(instance, required_stake, {
+                                game_id = game_id,
+                                ignore_stake_left = false,
+                                blinds_start = blind_amount,
+                                gold_needed = game.buying_gold
+                                })
+    if res.status ~= 0 then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.FailedToBuy .. ": " .. res.err
+        return result
     end
 
     local message = msgid .. " REGISTER " .. game_id .. " " .. player_stake .. "\n";
