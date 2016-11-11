@@ -624,11 +624,25 @@ function DataAction:showprevioushandAction(args)
     local redis = instance:getRedis()
     local game_runtime = Game_Runtime:new(instance, redis)
     local table_hand = game_runtime:getGameInfo(game_id, "TableHand_" .. table_id)
+    local table_state = game_runtime:getGameInfo(game_id, "TableState_" .. table_id)
+    cc.printdebug("table_hand: %s", table_hand)
+    cc.printdebug("table_state: %s", table_state)
     local hand_id = -1
-    if table_hand ~= nil then
-        local info = string_split(table_hand, ":")
-        hand_id = tonumber(info[2]) - 1 -- get previous hand
+    if table_hand ~= nil and table_state ~= nil then
+        local hand_info = string_split(table_hand, ":")
+        local inspect = require("inspect")
+
+        cc.printdebug("hand_info: %s", inspect(hand_info))
+
+        local state_info = string_split(table_state, ":")
+        local state = state_info[2]
+        if tonumber(state) == Constants.Snap.TableState.EndRound then
+            hand_id = tonumber(hand_info[2]) -- hand no still not increased at EndRound
+        else
+            hand_id = tonumber(hand_info[2]) - 1 -- get previous hand
+        end
     end
+    cc.printdebug("hand_id: %s", hand_id)
     if hand_id <= 0 then
         result.data.state = Constants.Error.NotExist
         result.data.msg = "No previous hand found"

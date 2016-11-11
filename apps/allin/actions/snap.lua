@@ -284,11 +284,16 @@ _handleTable = function (snap_value, args)
     local redis = args.redis
     local self = args.self
 
+    local user_runtime = User_Runtime:new(instance, redis)
+    local game_runtime = Game_Runtime:new(instance, redis)
+
     -- table state and bet round
     local head = table.remove(snap_value, 1)  -- same as head = array.shift()
     local tmp = string_split(head, ":")
     local table_state = tonumber(tmp[1])
     value.table_state = table_state
+    game_runtime:setGameInfo(game_id, "TableState_" .. table_id, "" .. table_id .. ":" .. value.table_state)
+
     if tonumber(value.table_state) == Constants.Snap.TableState.NewRound then
         -- subscribe to table channel
         local channel = Constants.TABLE_CHAT_CHANNEL_PREFIX .. tostring(game_id) .. "_" .. tostring(table_id)
@@ -301,8 +306,6 @@ _handleTable = function (snap_value, args)
     local key = "" .. game_id .. "_" .. table_id
 
     -- clear user_runtime RespiteCount if a new betting round started
-    local user_runtime = User_Runtime:new(instance, redis)
-    local game_runtime = Game_Runtime:new(instance, redis)
     local previous_betround = Helper:_getBetRound(instance, redis, game_id, table_id)
     if tonumber(previous_betround) ~= tonumber(value.bet_round) then
         -- whoever receives the new betround snap is responsible for clearing respite count for all players in the game
