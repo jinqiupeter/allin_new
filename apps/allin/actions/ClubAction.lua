@@ -382,7 +382,6 @@ function ClubAction:joinclubAction(args)
                       .. " VALUES (" .. instance:getCid() .. ", " 
                       .. club_id .. ", " 
                       .. instance:sqlQuote(notes) .. ") "
-                      .. " ON DUPLICATE KEY UPDATE status = 0, notes = " .. instance:sqlQuote(notes)
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
