@@ -83,8 +83,8 @@ function ClubAction:createclubAction(args)
     end
 
     -- join the club automatically
-    sql = "INSERT INTO user_club (user_id, club_id) "
-                      .. " VALUES (" .. instance:getCid() .. ", " .. club_id .. ") "
+    sql = "INSERT INTO user_club (user_id, club_id, is_admin) "
+                      .. " VALUES (" .. instance:getCid() .. ", " .. club_id .. ", 1)" 
                       .. " ON DUPLICATE KEY UPDATE deleted = 0"
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -371,8 +371,17 @@ function ClubAction:joinclubAction(args)
         return result
     end
 
+    local application_id, err = instance:getNextId("club_application")
+    if not application_id then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "failed to get next_id for table club_application, err: " .. err
+        return result
+    end
+
     sql = "INSERT INTO club_application (user_id, club_id, notes ) "
-                      .. " VALUES (" .. instance:getCid() .. ", " .. club_id .. ", " .. instance:sqlQuote(notes) .. ") "
+                      .. " VALUES (" .. instance:getCid() .. ", " 
+                      .. club_id .. ", " 
+                      .. instance:sqlQuote(notes) .. ") "
                       .. " ON DUPLICATE KEY UPDATE status = 0, notes = " .. instance:sqlQuote(notes)
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
@@ -386,16 +395,25 @@ function ClubAction:joinclubAction(args)
     result.data.club_id = club_id
     result.data.msg = "applied"
 
-    -- send to club owner for approval
+    -- send to club admins for approval
+    local admins = Helper:getClubAdminIds(instance, club_id)
     local online = instance:getOnline()
-    local message = {state_type = "server_push", data = {push_type = "club.application"}}
-    message.data.user_id = instance:getCid()
-    message.data.phone = instance:getPhone()
-    message.data.nickname = instance:getNickname()
-    message.data.club_id = club_id
-    message.data.club_name = club_name
-    message.data.notes = notes
-    online:sendMessage(owner_id, json.encode(message), Constants.MessageType.Club_NewMemberApply)
+    local index = 1
+    while index <= #admins do
+        local admin_id = admins[index]
+
+        local message = {state_type = "server_push", data = {push_type = "club.application"}}
+        message.data.user_id = instance:getCid()
+        message.data.phone = instance:getPhone()
+        message.data.nickname = instance:getNickname()
+        message.data.club_id = club_id
+        message.data.club_name = club_name
+        message.data.notes = notes
+        message.data.application_id = application_id
+        online:sendMessage(admin_id, json.encode(message), Constants.MessageType.Club_NewMemberApply)
+
+        index = index + 1
+    end
 
     return result
 end
@@ -445,11 +463,17 @@ function ClubAction:handleapplicationAction(args)
     local club_id = data.club_id
     local user_id = data.user_id
     local status = data.status
+    local application_id = data.application_id
     local result = {state_type = "action_state", data = {
         action = args.action}
     }
 
-    if not club_id then
+    if not application_id then
+        result.data.msg = "club_id not provided"
+        result.data.state = Constants.Error.ArgumentNotSet
+        return result
+    end
+    if not application_id then
         result.data.msg = "club_id not provided"
         result.data.state = Constants.Error.ArgumentNotSet
         return result
@@ -473,8 +497,16 @@ function ClubAction:handleapplicationAction(args)
     local instance = self:getInstance()
     local mysql = instance:getMysql()
 
-    -- get club name and check if i am owner
-    local sql = " SELECT * FROM club WHERE id = " .. club_id
+    -- check if i am admin
+    local isadmin = Helper:isClubAdmin(instance, {club_id = club_id})
+    if not isadmin then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = Constants.ErrorMsg.YouAreNotAdmin
+        return result
+    end
+
+    -- get club name and current_level
+    local sql = " SELECT * FROM club WHERE deleted = 0 AND id = " .. club_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then
@@ -483,17 +515,26 @@ function ClubAction:handleapplicationAction(args)
         return result
     end
     local club_name = dbres[1].name
-    if tonumber(instance:getCid()) ~= tonumber(dbres[1].owner_id) then
-        result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "You are not authorized to handle requests for club " .. club_name
-        return result
-    end
     local current_level = tonumber(dbres[1].level)
         
+    -- check if this application is already handled (by other admins)
+    sql = "SELECT status FROM club_application WHERE id = " .. application_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        result.data.state = Constants.Error.MysqlError
+        result.data.msg = "数据库错误: " .. err
+        return result
+    end
+    local handle_status = tonumber(dbres[1].status)
+    if handle_status ~= 0 then
+        result.data.state = Constants.Info
+        result.data.msg = Constants.ErrorMsg.ApplicationAlreadyHandled
+        return result
+    end
 
     sql = " UPDATE club_application set status = " .. status 
-                .. " WHERE user_id = " .. user_id
-                .. " AND club_id = " .. club_id
+                .. " WHERE id = " .. application_id
     cc.printdebug("executing sql: %s", sql)
     local dbres, err, errno, sqlstate = mysql:query(sql)
     if not dbres then

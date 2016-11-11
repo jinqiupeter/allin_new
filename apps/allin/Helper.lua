@@ -297,4 +297,29 @@ function Helper:rebuy(instance, redis, required_stake, args)
     return {status = 0, stake_bought = rebuy_stake}
 end
 
+-- get all admin ids, including owner id
+function Helper:getClubAdminIds(instance, club_id)
+    local mysql = instance:getMysql()    
+
+    local adminIds = {}
+    local sql = "SELECT user_id FROM user_club WHERE deleted = 0 AND is_admin = 1 AND club_id = " .. club_id
+    cc.printdebug("executing sql: %s", sql)
+    local dbres, err, errno, sqlstate = mysql:query(sql)
+    if not dbres then
+        return adminIds
+    end
+    if next(dbres) == nil then
+        return adminIds
+    end
+    
+    while next(dbres) ~= nil do
+        table.insert(adminIds, dbres[1].user_id)
+        table.remove(dbres, 1)
+    end
+
+    local inspect = require("inspect")
+    cc.printdebug("admins for club %s: %s", club_id, inspect(adminIds))
+    return adminIds;
+end
+
 return Helper

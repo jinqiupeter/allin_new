@@ -80,6 +80,7 @@ _M.Snap = {
 }
 
 _M.OK = 0
+_M.Info = 500
 _M.Error = {
     ArgumentNotSet      = 1,
     AllinError          = 2,
@@ -172,6 +173,7 @@ _M.ErrorMsg = {
     YouAreNotOwner                  = "您不是该俱乐部的创建者，无法进行此次操作！",
     FundsNotEnough                  = "俱乐部剩余基金（%s）不足，请联系俱乐部创建人充值基金后操作！",
     StakeLeftNotEnough              = "您的剩余筹码(%s)小于当前牌局大盲(%s)，请Rebuy!",
+    ApplicationAlreadyHandled       = "该申请已被处理",
 }
 
 return table.readonly(_M)
