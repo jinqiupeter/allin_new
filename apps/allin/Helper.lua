@@ -264,6 +264,20 @@ function Helper:_getBetRound(instance, redis, game_id, table_id)
     return betround
 end
 
+function Helper:_getTableState(instance, redis, game_id, table_id)
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local table_state_str = game_runtime:getGameInfo(game_id, "TableState_" .. table_id)
+    local table_state = -1
+    if table_state_str ~= nil then
+        local info = string_split(table_state_str, ":")
+        if info[2] ~= nil then
+            table_state = info[2]
+        end
+    end
+     
+    return table_state
+end
+
 function Helper:rebuy(instance, redis, required_stake, args)
     local game_id = args.game_id
     local player_id = args.for_player or instance:getCid()

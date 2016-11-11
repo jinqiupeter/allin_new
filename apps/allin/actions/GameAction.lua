@@ -522,7 +522,7 @@ function GameAction:creategameAction(args)
         action = args.action}
     }
     -- user input validity check
-    local game_mode = data.game_mode
+    local game_mode = tonumber(data.game_mode)
     local extra = {}
     if not game_mode then
         result.data.msg = "game_mode not provided"
@@ -863,6 +863,8 @@ function GameAction:creategameAction(args)
     game_runtime:setGameInfo(game_id, "BlindAmount", blinds_start)
     game_runtime:setGameInfo(game_id, "BlindLevel", 1)
     game_runtime:setGameInfo(game_id, "GameMode", game_mode)
+    local game_mode_set = game_runtime:getGameInfo(game_id, "GameMode")
+    cc.printdebug("game_mode after set : %s", game_mode_set)
     game_runtime:setGameInfo(game_id, "Duration", extra.duration or 0)
 
     if not extra.insurance then
@@ -1275,6 +1277,8 @@ function GameAction:rebuyAction(args)
     local user_runtime = User_Runtime:new(instance, redis)
     local game_runtime = Game_Runtime:new(instance, redis)
     local rebuy_count = tonumber(user_runtime:getRebuyCount(game_id)) or 0
+    local blind_amount_str = game_runtime:getGameInfo(game_id, "BlindAmount")
+    cc.printdebug("Blind amount for game %s: %s", game_id, blind_amount_str)
     local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount"))
     local level = blind_amount  / tonumber(game.blinds_start)
     if tonumber(game.game_mode) == Constants.GameMode.GameModeRingGame then
@@ -1311,6 +1315,7 @@ function GameAction:rebuyAction(args)
         end 
 
     elseif tonumber(game.game_mode) == Constants.GameMode.GameModeSNG or tonumber(game.game_mode) == Constants.GameMode.GameModeFreezeOut then
+
         local sub_query = "SELECT MAX(updated_at) as updated_at FROM buying WHERE "
                         .. " game_id = " .. game_id 
                         .. " AND user_id = " .. instance:getCid()

@@ -473,6 +473,7 @@ function SocialAction:handlerebuyrequestAction(args)
     --  handlerebuyrequestAction is only available for SitAndGo games
     local game_runtime = Game_Runtime:new(instance, redis)
     local game_mode = game_runtime:getGameInfo(game_id, "GameMode")
+    cc.printdebug("game_mode: %s", game_mode)
     if tonumber(game_mode) ~= Constants.GameMode.GameModeRingGame then
         result.data.state = Constants.Error.PermissionDenied
         result.data.msg = "handlerebuyrequestAction is only available for SitAndGo games"
