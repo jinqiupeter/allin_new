@@ -42,6 +42,7 @@ local _USERNAME_TO_CONNECT = "_USERNAME_TO_CONNECT"
 function Online:ctor(instance)
     self._instance  = instance
     self._redis     = instance:getRedis()
+    self._mysql     = instance:getMysql()
     self._broadcast = gbc.Broadcast:new(self._redis, instance.config.app.websocketMessageFormat)
 end
 
@@ -86,6 +87,19 @@ function Online:add(username, connectId)
     return
 end
 
+function Online:isOnline(user_id)
+    local redis = self._redis
+    local connectId, err = redis:hget(_USERNAME_TO_CONNECT, user_id)
+    if not connectId then
+        return false
+    end
+    if connectId == redis.null then
+        return false
+    end
+
+    return connectId ~= nil
+end
+
 function Online:remove(username)
     local redis = self._redis
     local connectId, err = redis:hget(_USERNAME_TO_CONNECT, username)
@@ -115,28 +129,74 @@ function Online:getChannel()
     return _ONLINE_CHANNEL
 end
 
-function Online:sendMessage(recipient, event)
+function Online:sendMessage(recipient, event, message_type, club_id)
     local redis = self._redis
-    -- query connect id by recipient
-    local connectId, err = redis:hget(_USERNAME_TO_CONNECT, recipient)
+    local instance = self._instance
 
-    if not connectId then
-        return nil, err
+    if self:isOnline(recipient) then 
+        cc.printdebug("sending message to online user %s: %s", recipient, event)
+        -- user is online, send directly
+        -- query connect id by recipient
+        local connectId, err = redis:hget(_USERNAME_TO_CONNECT, recipient)
+        if not connectId then
+            return nil, err
+        end
+        if connectId == redis.null then
+            return nil, string_format("not found recipient '%s'", recipient)
+        end
+        -- send message to connect id
+        return self._broadcast:sendMessage(connectId, event)
+
+    else 
+        -- user is offline,  save to offline message
+        cc.printdebug("saving message to offline user %s: %s", recipient, event)
+        local mysql = self._mysql
+        local from_id = instance:getCid()
+        if recipient == 0 and club_id ~= nil then
+            from_id = club_id
+        end
+            
+        local typ = message_type or -1
+        local sql = "INSERT INTO message (type, from_id, to_id, content) VALUES ( "
+                .. typ .. ", "
+                .. from_id .. ", "
+                .. recipient .. ", "
+                .. instance:sqlQuote(event) .. ")"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            return nil, err
+        end
     end
-
-    if connectId == redis.null then
-        return nil, string_format("not found recipient '%s'", recipient)
-    end
-
-    -- send message to connect id
-    return self._broadcast:sendMessage(connectId, event)
 end
 
-function Online:sendClubMessage(club_id, message)
+function Online:sendClubMessage(club_id, message, messageType)
+    local message_id, err = self._instance:getNextId("message")
+    if not message_id then
+        cc.printdebug("Failed to get next id for table: message")
+        return nil
+    end
+
+    -- there will be only 1 message inserted for club_messages
+    self:sendMessage(0, message, messageType, club_id)
+
+    -- online club members
     local members = self:getClubMembers(club_id)
+    local mysql = self._mysql
     for key, value in pairs(members) do
-        cc.printdebug("sending message to user %s", value)
-        self:sendMessage(value, json.encode(message))
+        cc.printdebug("sending message to user %s", value, messageType)
+        self:sendMessage(value, message, messageType)
+
+        -- make messages as read for online users
+        local sql = "INSERT INTO message_read (message_id, user_id) VALUES ( "
+                .. message_id .. ", "
+                .. value .. ")"
+        cc.printdebug("executing sql: %s", sql)
+        local dbres, err, errno, sqlstate = mysql:query(sql)
+        if not dbres then
+            cc.printdebug("DB error: %s", err)
+            return nil, err
+        end
     end
 end
 
