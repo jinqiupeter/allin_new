@@ -815,16 +815,17 @@ _handleBuyInsurance = function (snap_value, args)
     local self = args.self
     local value = {}
     value.max_payment = snap_value[1]
-    value.outs = string_split(snap_value[2], ":")
-    if (snap_value[3] ~= "0") then
-        value.outs_divided = string_split(snap_value[3], ":")
+    value.min_buy = snap_value[2]
+    value.outs = string_split(snap_value[3], ":")
+    if (snap_value[4] ~= "0") then
+        value.outs_divided = string_split(snap_value[4], ":")
     else
         value.outs_divided = {}
     end
 
     value.opponent = {}
     
-    local opponent = string_split(snap_value[4], "-")
+    local opponent = string_split(snap_value[5], "-")
 
     for i= 1, table.getn(opponent) do
         local cards = string_split(opponent[i],":")
