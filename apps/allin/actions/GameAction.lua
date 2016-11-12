@@ -1212,13 +1212,13 @@ function GameAction:buyinsuranceAction(args)
 
     local bet_round =  Helper:_getBetRound(instance, redis, game_id, table_id)
     cc.printdebug("buyinsuranceAction betround :"..bet_round)
-    if bet_round == nil or (tonumber(bet_round) ~= Constants.Snap.BetRound.Flop and tonumber(bet_round) ~= Constants.Snap.BetRound.Turn) then
-        result.data.msg = Constants.ErrorMsg.CannotBuyInsurance..bet_round
-        result.data.state = Constants.Error.LogicError
+    --if bet_round == nil or (tonumber(bet_round) ~= Constants.Snap.BetRound.Flop and tonumber(bet_round) ~= Constants.Snap.BetRound.Turn) then
+    --    result.data.msg = Constants.ErrorMsg.CannotBuyInsurance..bet_round
+    --    result.data.state = Constants.Error.LogicError
         
-        cc.printdebug("buyinsuranceAction betround error :"..bet_round)
-        return result
-    end
+    --    cc.printdebug("buyinsuranceAction betround error :"..bet_round)
+    --    return result
+    --end
 
     local buy_cards = data.buy_cards
     local buy_amount = data.buy_amount
