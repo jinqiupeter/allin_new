@@ -592,6 +592,8 @@ _handleStakeChange = function (snap_value, args)
 
     -- only dealer should update game_stake table
     if tonumber(instance:getCid()) == tonumber(self:_getDealer(instance, redis, game_id, table_id)) then
+        local inspect = require("inspect")
+        cc.printdebug("updating game stake for game %s: %s", game_id, inspect(player_stakes))
         self:_updateGameStake(player_stakes, {game_id = game_id, table_id = table_id, mysql = args.mysql, instance = instance, redis = redis})
     end 
 
