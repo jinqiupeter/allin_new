@@ -60,12 +60,12 @@ function Game_Runtime:getPlayerCount(game_id)
 end
 
 function Game_Runtime:isPlayer(game_id, player_id)
-    return self._redis:sismember(_GAME_RUNTIME_SET .. game_id, player_id)
+    return self._redis:sismember(_GAME_RUNTIME_SET .. game_id, player_id) or 0
 end
 
 function Game_Runtime:setGameInfo(game_id, field, value)
     local redis = self._redis
-    return redis:hset(_GAME_RUNTIME_INFO .. game_id, field, ""..value)
+    return redis:hset(_GAME_RUNTIME_INFO .. game_id, field, ""..value) or nil
 end
 
 function Game_Runtime:getGameInfo(game_id, field)
@@ -73,9 +73,11 @@ function Game_Runtime:getGameInfo(game_id, field)
     local result, err = redis:hget(_GAME_RUNTIME_INFO .. game_id, field)
 
     if not result then
+        cc.printdebug("Error: redis hget error: %s", err)
         return nil, err
     end
     if result == redis.null then
+        cc.printdebug("Error: redis hget %s null ", field)
         return nil, string_format(field .. " not found in hash %s", _GAME_RUNTIME_INFO .. game_id)
     end
 

@@ -1210,16 +1210,6 @@ function GameAction:buyinsuranceAction(args)
     -- check if game has started or not
     end
 
-    local bet_round =  Helper:_getBetRound(instance, redis, game_id, table_id)
-    cc.printdebug("buyinsuranceAction betround :"..bet_round)
-    --if bet_round == nil or (tonumber(bet_round) ~= Constants.Snap.BetRound.Flop and tonumber(bet_round) ~= Constants.Snap.BetRound.Turn) then
-    --    result.data.msg = Constants.ErrorMsg.CannotBuyInsurance..bet_round
-    --    result.data.state = Constants.Error.LogicError
-        
-    --    cc.printdebug("buyinsuranceAction betround error :"..bet_round)
-    --    return result
-    --end
-
     local buy_cards = data.buy_cards
     local buy_amount = data.buy_amount
 
@@ -1911,6 +1901,10 @@ function GameAction:onDisconnect(event)
 
     -- unregister user in Sit&Go games
     local inspect = require("inspect")
+    if type(joined_games) ~= "table" then
+        return
+    end
+
     cc.printdebug("user %s joined games: %s", instance:getCid(), inspect(joined_games))
     for key, value in pairs(joined_games) do
         local game_mode = game_runtime:getGameInfo(value, "GameMode")
