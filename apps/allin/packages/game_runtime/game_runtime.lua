@@ -56,7 +56,7 @@ function Game_Runtime:getPlayers(game_id)
 end
 
 function Game_Runtime:getPlayerCount(game_id)
-    return self._redis:scard(_GAME_RUNTIME_SET .. game_id)
+    return self._redis:scard(_GAME_RUNTIME_SET .. game_id) or 0
 end
 
 function Game_Runtime:isPlayer(game_id, player_id)

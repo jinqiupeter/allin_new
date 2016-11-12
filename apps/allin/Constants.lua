@@ -171,9 +171,11 @@ _M.ErrorMsg = {
     CurrentMembersMoreThanTarget    = "当前俱乐部人数（%s）大于目标级别（%s）允许的最大人数（%s），请删除部分成员后重试",
     YouAreNotAdmin                  = "您不是该俱乐部的管理员，无法进行此次操作！",
     YouAreNotOwner                  = "您不是该俱乐部的创建者，无法进行此次操作！",
+    YouAreNotMember                 = "您不是该俱乐部的成员，无法进行此次操作！",
     FundsNotEnough                  = "俱乐部剩余基金（%s）不足，请联系俱乐部创建人充值基金后操作！",
     StakeLeftNotEnough              = "您的剩余筹码(%s)小于当前牌局大盲(%s)，请Rebuy!",
     ApplicationAlreadyHandled       = "该申请已被处理",
+    MaxPlayersExceeded              = "当前游戏人数已达到最大人数限制（%s）！",
 }
 
 return table.readonly(_M)

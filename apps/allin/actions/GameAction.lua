@@ -990,12 +990,22 @@ function GameAction:joingameAction(args)
     local user_clubs = instance:getClubIds(instance:getMysql())
     if not table.contains(user_clubs, tonumber(game.club_id)) then
         result.data.state = Constants.Error.PermissionDenied
-        result.data.msg = "you are not member of club with club_id: " .. game.club_id
+        result.data.msg = Constants.ErrorMsg.YouAreNotMember
         return result
     end
 
     self._currentAction = args.action
     self._msgid = msgid
+
+    local redis = instance:getRedis()
+    local game_runtime = Game_Runtime:new(instance, redis)
+    local player_count = game_runtime:getPlayerCount(game_id)
+    if tonumber(player_count) >= tonumber(game.max_players) then
+        result.data.state = Constants.Error.PermissionDenied
+        result.data.msg = string_format(Constants.ErrorMsg.MaxPlayersExceeded, game.max_players)
+        return result
+    end
+        
 
     local sql = "SELECT COUNT(*) AS count FROM user_game_history "
             .. " WHERE game_id = " .. game_id 
@@ -1010,8 +1020,6 @@ function GameAction:joingameAction(args)
     local played = tonumber(dbres[1].count)
 
     -- stake left must be larger than current blind amount, which is created in game.creategame and updated in snap.TableSnap
-    local redis = instance:getRedis()
-    local game_runtime = Game_Runtime:new(instance, redis)
     local blind_amount = tonumber(game_runtime:getGameInfo(game_id, "BlindAmount")) or 0
 
     -- see http://naotu.baidu.com/file/efe2380645f427be63f927153959615f?token=a6d098a082ef1cd1
