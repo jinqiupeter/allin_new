@@ -1000,7 +1000,9 @@ function GameAction:joingameAction(args)
     local redis = instance:getRedis()
     local game_runtime = Game_Runtime:new(instance, redis)
     local player_count = game_runtime:getPlayerCount(game_id)
-    if tonumber(player_count) >= tonumber(game.max_players) then
+    local is_playing = game_runtime:isPlayer(game_id, instance:getCid())
+    if tonumber(player_count) >= tonumber(game.max_players) 
+        and tonumber(is_playing) == 0 then
         result.data.state = Constants.Error.PermissionDenied
         result.data.msg = string_format(Constants.ErrorMsg.MaxPlayersExceeded, game.max_players)
         return result
