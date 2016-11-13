@@ -837,6 +837,9 @@ _handleBuyInsurance = function (snap_value, args)
         opponent_val.hole = cards
         value.opponent[i] = opponent_val
     end
+    
+    value.pots = string_split(snap_value[6], ":")
+    value.investment = string_split(snap_value[7], ":")
 
     cc.printdebug("_handleBuyInsurance called")
     return value
