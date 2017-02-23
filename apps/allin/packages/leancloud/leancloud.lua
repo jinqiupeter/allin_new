@@ -8,8 +8,8 @@ local httpc = http.new()
 
 local gbc = cc.import("#gbc")
 
-local lc_app_id = "wm47B8HP9v2TpHq6PCMHj2YB-gzGzoHsz"
-local lc_app_key = "TQuoN8SPi7sveRutaWJyYscL"
+local lc_app_id = "uWlQbJlDpGRVHBUYbjVPIQeT-gzGzoHsz"
+local lc_app_key = "Oio6h3tP9jEQPikmdvWCG5Dc"
 local default_headers = {
     ["Content-Type"] = "application/json",
     ["X-LC-Id"] = lc_app_id,
