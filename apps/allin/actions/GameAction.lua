@@ -691,6 +691,11 @@ function GameAction:creategameAction(args)
             result.data.state = Constants.Error.ArgumentNotSet
             return result
         end
+
+        -- SNG is not available yet
+        result.data.msg = Constants.ErrorMsg.GameModeNotAvailable
+        result.data.state = Constants.Error.NotExist
+        return result
     end
         
     -- buying gold

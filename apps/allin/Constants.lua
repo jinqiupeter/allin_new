@@ -176,6 +176,7 @@ _M.ErrorMsg = {
     StakeLeftNotEnough              = "您的剩余筹码(%s)小于当前牌局大盲(%s)，请Rebuy!",
     ApplicationAlreadyHandled       = "该申请已被处理",
     MaxPlayersExceeded              = "当前游戏人数已达到最大人数限制（%s）！",
+    GameModeNotAvailable            = "尚未开放，敬请期待！",
 }
 
 return table.readonly(_M)
